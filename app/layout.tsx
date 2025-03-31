@@ -1,6 +1,14 @@
-import { AuthProvider } from '@/contexts/AuthContext'
-import Navbar from '@/components/Navbar'
+import 'mapbox-gl/dist/mapbox-gl.css';
+import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css';
 import './globals.css'
+import type { Metadata } from 'next'
+import Navbar from '@/components/Navbar'
+import { AuthProvider } from '@/contexts/AuthContext'
+
+export const metadata: Metadata = {
+  title: 'Construction Marketplace',
+  description: 'Trade construction materials sustainably',
+}
 
 export default function RootLayout({
   children,
@@ -12,9 +20,9 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <Navbar />
-          <div className="pt-16"> {/* Add padding for fixed navbar */}
+          <main className="pt-16">
             {children}
-          </div>
+          </main>
         </AuthProvider>
       </body>
     </html>

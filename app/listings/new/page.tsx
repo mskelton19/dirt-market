@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -45,6 +45,102 @@ export default function NewListingPage() {
     setValue,
   } = useForm<ListingFormData>()
 
+  const updateLocationFromCoordinates = async (map: mapboxgl.Map, lng: number, lat: number) => {
+    try {
+      // Get address from coordinates
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}`
+      );
+      const data = await response.json();
+      
+      if (data.features && data.features.length > 0) {
+        const placeName = data.features[0].place_name;
+        setValue('location', placeName);
+        setValue('latitude', lat);
+        setValue('longitude', lng);
+
+        // Update geocoder input
+        const geocoderInput = document.querySelector('.mapboxgl-ctrl-geocoder input') as HTMLInputElement;
+        if (geocoderInput) {
+          geocoderInput.value = placeName;
+        }
+      }
+
+      // Fly to location
+      map.flyTo({
+        center: [lng, lat],
+        zoom: 12
+      });
+    } catch (error) {
+      console.error('Error updating location:', error);
+    }
+  };
+
+  // Map initialization effect
+  useEffect(() => {
+    if (!map) {
+      const newMap = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [-98.5795, 39.8283],
+        zoom: 3
+      });
+
+      // Add navigation controls
+      newMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+      // Create geocoder
+      const geocoder = new MapboxGeocoder({
+        accessToken: mapboxgl.accessToken,
+        mapboxgl: mapboxgl,
+        placeholder: 'Search for a location',
+        marker: false
+      });
+
+      // Add geocoder to the DOM
+      const geocoderContainer = document.getElementById('geocoder-container');
+      if (geocoderContainer) {
+        geocoderContainer.appendChild(geocoder.onAdd(newMap));
+      }
+
+      // Create initial marker
+      const initialMarker = new mapboxgl.Marker({
+        draggable: true
+      })
+        .setLngLat([-98.5795, 39.8283])
+        .addTo(newMap);
+      setMarker(initialMarker);
+
+      // Handle marker drag end
+      initialMarker.on('dragend', () => {
+        const lngLat = initialMarker.getLngLat();
+        updateLocationFromCoordinates(newMap, lngLat.lng, lngLat.lat);
+      });
+
+      // Handle map click
+      newMap.on('click', (e) => {
+        const { lng, lat } = e.lngLat;
+        initialMarker.setLngLat([lng, lat]);
+        updateLocationFromCoordinates(newMap, lng, lat);
+      });
+
+      // Handle geocoder result
+      geocoder.on('result', (event) => {
+        const [lng, lat] = event.result.center;
+        initialMarker.setLngLat([lng, lat]);
+        updateLocationFromCoordinates(newMap, lng, lat);
+      });
+
+      setMap(newMap);
+    }
+
+    return () => {
+      if (map) {
+        map.remove();
+      }
+    };
+  }, []);
+
   const onSubmit = async (data: ListingFormData) => {
     try {
       setIsSubmitting(true)
@@ -81,7 +177,7 @@ export default function NewListingPage() {
                 type="text"
                 id="title"
                 {...register('title', { required: 'Site name is required' })}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2"
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
                 placeholder="Enter site name"
               />
               {errors.title && (
@@ -96,13 +192,13 @@ export default function NewListingPage() {
               </label>
               <Listbox value={selectedMaterial} onChange={setSelectedMaterial}>
                 <div className="relative mt-1">
-                  <Listbox.Button className="relative w-full cursor-default rounded-md bg-white py-2 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                  <Listbox.Button className="relative w-full cursor-default rounded-md bg-white py-2 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-sans text-gray-900">
                     <span className="block truncate">{selectedMaterial.name}</span>
                     <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                       <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
                     </span>
                   </Listbox.Button>
-                  <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none text-sm">
+                  <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none text-sm font-sans">
                     {materialTypes.map((material) => (
                       <Listbox.Option
                         key={material.id}
@@ -146,11 +242,11 @@ export default function NewListingPage() {
                     required: 'Quantity is required',
                     min: { value: 0.1, message: 'Quantity must be greater than 0' }
                   })}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
                   placeholder="0.0"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 text-sm">
+                  <span className="text-gray-500 text-sm font-sans">
                     {selectedMaterial.unit === 'cubic_yards' ? 'yd³' : 'tons'}
                   </span>
                 </div>
@@ -169,7 +265,7 @@ export default function NewListingPage() {
                 id="description"
                 rows={4}
                 {...register('description', { required: 'Description is required' })}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2"
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
                 placeholder="Describe the material and any relevant details"
               />
               {errors.description && (
@@ -183,13 +279,7 @@ export default function NewListingPage() {
                 Location
               </label>
               <div id="map" className="h-64 rounded-md mb-2"></div>
-              <input
-                type="text"
-                id="location"
-                {...register('location', { required: 'Location is required' })}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2"
-                placeholder="Search for a location or click on the map"
-              />
+              <div id="geocoder-container" className="mb-2"></div>
               {errors.location && (
                 <p className="mt-1 text-sm text-red-600">{errors.location.message}</p>
               )}
