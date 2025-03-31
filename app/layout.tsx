@@ -12,7 +12,9 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <Navbar />
-          {children}
+          <div className="pt-16"> {/* Add padding for fixed navbar */}
+            {children}
+          </div>
         </AuthProvider>
       </body>
     </html>

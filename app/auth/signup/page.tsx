@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
@@ -15,11 +16,10 @@ export default function SignUpPage() {
     e.preventDefault()
     try {
       await signUp(email, password)
-      router.push('/listings')  // Changed from '/auth/login' to '/listings'
+      router.push('/listings')
     } catch (error) {
       setError('Failed to create account')
     }
-  }
   }
 
   return (
@@ -79,11 +79,12 @@ export default function SignUpPage() {
               Sign up
             </button>
           </div>
+
           <div className="text-sm text-center mt-4">
-            <a href="/auth/login" className="font-medium text-indigo-600 hover:text-indigo-500">
-                Already have an account? Sign in
-            </a>
-            </div>
+            <Link href="/auth/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+              Already have an account? Sign in
+            </Link>
+          </div>
         </form>
       </div>
     </div>
