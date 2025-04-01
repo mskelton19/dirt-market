@@ -15,7 +15,8 @@ mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
 type MaterialType = 'topsoil' | 'structural_fill' | 'gravel'
 
 interface ListingFormData {
-  title: string
+  site_name: string
+  listing_type: 'import' | 'export'
   material_type: MaterialType
   quantity: number
   unit: string
@@ -24,6 +25,11 @@ interface ListingFormData {
   latitude: number
   longitude: number
 }
+
+const listingTypes = [
+  { id: 'import', name: 'Import - Looking for material' },
+  { id: 'export', name: 'Export - Have excess material' },
+]
 
 const materialTypes = [
   { id: 'topsoil', name: 'Topsoil', unit: 'cubic_yards' },
@@ -34,9 +40,11 @@ const materialTypes = [
 export default function NewListingPage() {
   const router = useRouter()
   const [selectedMaterial, setSelectedMaterial] = useState(materialTypes[0])
+  const [selectedListingType, setSelectedListingType] = useState(listingTypes[0])
   const [map, setMap] = useState<mapboxgl.Map | null>(null)
   const [marker, setMarker] = useState<mapboxgl.Marker | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [geocoder, setGeocoder] = useState<MapboxGeocoder | null>(null)
 
   const {
     register,
@@ -90,7 +98,7 @@ export default function NewListingPage() {
       newMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
       // Create geocoder
-      const geocoder = new MapboxGeocoder({
+      const newGeocoder = new MapboxGeocoder({
         accessToken: mapboxgl.accessToken,
         mapboxgl: mapboxgl,
         placeholder: 'Search for a location',
@@ -100,7 +108,9 @@ export default function NewListingPage() {
       // Add geocoder to the DOM
       const geocoderContainer = document.getElementById('geocoder-container');
       if (geocoderContainer) {
-        geocoderContainer.appendChild(geocoder.onAdd(newMap));
+        // Clear any existing content
+        geocoderContainer.innerHTML = '';
+        geocoderContainer.appendChild(newGeocoder.onAdd(newMap));
       }
 
       // Create initial marker
@@ -125,18 +135,25 @@ export default function NewListingPage() {
       });
 
       // Handle geocoder result
-      geocoder.on('result', (event) => {
+      newGeocoder.on('result', (event) => {
         const [lng, lat] = event.result.center;
         initialMarker.setLngLat([lng, lat]);
         updateLocationFromCoordinates(newMap, lng, lat);
       });
 
       setMap(newMap);
+      setGeocoder(newGeocoder);
     }
 
     return () => {
       if (map) {
         map.remove();
+      }
+      if (geocoder) {
+        const geocoderContainer = document.getElementById('geocoder-container');
+        if (geocoderContainer) {
+          geocoderContainer.innerHTML = '';
+        }
       }
     };
   }, []);
@@ -147,6 +164,9 @@ export default function NewListingPage() {
       const { data: listing, error } = await supabase.from('listings').insert([
         {
           ...data,
+          listing_type: selectedListingType.id,
+          material_type: selectedMaterial.id,
+          unit: selectedMaterial.unit,
           status: 'active',
           user_id: (await supabase.auth.getUser()).data.user?.id,
         },
@@ -170,19 +190,62 @@ export default function NewListingPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {/* Site Name */}
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="site_name" className="block text-sm font-medium text-gray-700 mb-1">
                 Site Name
               </label>
               <input
                 type="text"
-                id="title"
-                {...register('title', { required: 'Site name is required' })}
+                id="site_name"
+                {...register('site_name', { required: 'Site name is required' })}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
                 placeholder="Enter site name"
               />
-              {errors.title && (
-                <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+              {errors.site_name && (
+                <p className="mt-1 text-sm text-red-600">{errors.site_name.message}</p>
               )}
+            </div>
+
+            {/* Listing Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Listing Type
+              </label>
+              <Listbox value={selectedListingType} onChange={setSelectedListingType}>
+                <div className="relative mt-1">
+                  <Listbox.Button className="relative w-full cursor-default rounded-md bg-white py-2 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-sans text-gray-900">
+                    <span className="block truncate">{selectedListingType.name}</span>
+                    <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                      <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    </span>
+                  </Listbox.Button>
+                  <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none text-sm font-sans">
+                    {listingTypes.map((type) => (
+                      <Listbox.Option
+                        key={type.id}
+                        className={({ active }) =>
+                          `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                            active ? 'bg-indigo-100 text-indigo-900' : 'text-gray-900'
+                          }`
+                        }
+                        value={type}
+                      >
+                        {({ selected }) => (
+                          <>
+                            <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                              {type.name}
+                            </span>
+                            {selected ? (
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-indigo-600">
+                                <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </Listbox.Option>
+                    ))}
+                  </Listbox.Options>
+                </div>
+              </Listbox>
             </div>
 
             {/* Material Type */}
@@ -279,7 +342,41 @@ export default function NewListingPage() {
                 Location
               </label>
               <div id="map" className="h-64 rounded-md mb-2"></div>
-              <div id="geocoder-container" className="mb-2"></div>
+              <div id="geocoder-container" className="mb-2 w-full"></div>
+              <style jsx global>{`
+                .mapboxgl-ctrl-geocoder {
+                  width: 100% !important;
+                  max-width: none !important;
+                }
+                .mapboxgl-ctrl-geocoder input {
+                  width: 100% !important;
+                  font-size: 14px !important;
+                  padding: 8px 12px 8px 36px !important;
+                  border-radius: 6px !important;
+                  border: 1px solid #d1d5db !important;
+                }
+                .mapboxgl-ctrl-geocoder .geocoder-icon {
+                  position: absolute !important;
+                  left: 12px !important;
+                  top: 50% !important;
+                  transform: translateY(-50%) !important;
+                  z-index: 1 !important;
+                }
+                .mapboxgl-ctrl-geocoder .suggestions {
+                  font-size: 14px !important;
+                }
+                .mapboxgl-ctrl-geocoder .suggestions .suggestion {
+                  padding: 8px 12px !important;
+                }
+                @media (max-width: 640px) {
+                  .mapboxgl-ctrl-geocoder input {
+                    font-size: 14px !important;
+                  }
+                  .mapboxgl-ctrl-geocoder .suggestions {
+                    font-size: 14px !important;
+                  }
+                }
+              `}</style>
               {errors.location && (
                 <p className="mt-1 text-sm text-red-600">{errors.location.message}</p>
               )}
