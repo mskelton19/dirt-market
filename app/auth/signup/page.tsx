@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 import Link from 'next/link'
 
 export default function SignUpPage() {
@@ -33,36 +33,39 @@ export default function SignUpPage() {
         password,
       })
 
-      if (signUpError) throw signUpError
+      if (signUpError) {
+        console.error('Sign up error:', signUpError)
+        throw signUpError
+      }
 
-      // If we have a user, create their profile
+      // If we have a user, create their profile using the admin client
       if (signUpData?.user) {
-        console.log('Creating user profile for:', signUpData.user.id) // Debug log
+        console.log('Creating user profile for:', signUpData.user.id)
         
-        const { error: profileError } = await supabase
+        // Use supabaseAdmin to bypass RLS
+        const { error: profileError } = await supabaseAdmin
           .from('user_profiles')
-          .insert({
+          .insert([{
             user_id: signUpData.user.id,
             first_name: firstName,
             last_name: lastName,
             company: company,
             position: position,
             zip_code: zipCode
-          })
-          .select()
+          }])
 
         if (profileError) {
-          console.error('Profile creation error:', profileError) // Debug log
-          throw profileError
+          console.error('Profile creation error details:', profileError)
+          throw new Error(`Failed to create profile: ${profileError.message}`)
         }
 
-        // If everything is successful, redirect
-        router.push('/listings')
+        // Show success message and redirect
+        router.push('/auth/verify-email')
       } else {
         throw new Error('No user data after signup')
       }
     } catch (error: any) {
-      console.error('Full error:', error) // Debug log
+      console.error('Full error details:', error)
       setError(error.message || 'An error occurred during sign up. Please try again.')
     } finally {
       setIsSubmitting(false)
