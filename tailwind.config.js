@@ -21,6 +21,15 @@ module.exports = {
             900: '#0c4a6e',
           },
         },
+        fontSize: {
+          'display': ['4rem', { lineHeight: '1.2' }],
+          'heading': ['2.5rem', { lineHeight: '1.3' }],
+          'subheading': ['1.5rem', { lineHeight: '1.5' }],
+          'body': ['1.125rem', { lineHeight: '1.6' }],
+        },
+        spacing: {
+          'section': '6rem',
+        },
       },
     },
     plugins: [

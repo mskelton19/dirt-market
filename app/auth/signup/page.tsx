@@ -165,13 +165,18 @@ export default function SignUpPage() {
               <label htmlFor="position" className="block text-sm font-medium text-gray-900 mb-1">
                 Position <span className="text-red-500">*</span>
               </label>
-              <input
+              <select
                 id="position"
                 name="position"
-                type="text"
                 required
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
-              />
+                defaultValue=""
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900"
+              >
+                <option value="" disabled>Select your position</option>
+                <option value="Foreman/Site Superintendent">Foreman/Site Superintendent</option>
+                <option value="Project Manager">Project Manager</option>
+                <option value="Estimator">Estimator</option>
+              </select>
             </div>
 
             {/* Zip Code */}

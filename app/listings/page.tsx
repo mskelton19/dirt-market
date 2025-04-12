@@ -29,17 +29,33 @@ export default function ListingsPage() {
 
   async function fetchListings() {
     try {
+      console.log('Fetching listings...')
       const { data, error } = await supabase
         .from('listings')
         .select('*')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
+
+      console.log('Fetched listings:', data)
       setListings(data || [])
-    } catch (error) {
-      console.error('Error fetching listings:', error)
-      setError('Failed to load listings')
+    } catch (error: any) {
+      console.error('Error fetching listings:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      setError(error.message || 'Failed to load listings')
     } finally {
       setLoading(false)
     }
@@ -56,7 +72,35 @@ export default function ListingsPage() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-red-600">{error}</div>
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Listings</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchListings}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (listings.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">No Listings Available</h2>
+            <p className="text-gray-600 mb-8">Be the first to post a listing!</p>
+            <Link
+              href="/listings/new"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              Create New Listing
+            </Link>
+          </div>
+        </div>
       </div>
     )
   }
@@ -187,49 +231,6 @@ export default function ListingsPage() {
             </div>
           ))}
         </div>
-
-        {listings.length === 0 && (
-          <div className="text-center py-12">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No listings</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Get started by creating a new listing.
-            </p>
-            <div className="mt-6">
-              <Link
-                href="/listings/new"
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <svg
-                  className="-ml-1 mr-2 h-5 w-5"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                Post New Listing
-              </Link>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
