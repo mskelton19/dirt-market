@@ -35,54 +35,119 @@ export default function NewListingPage() {
   const { user } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [mapboxError, setMapboxError] = useState<string | null>(null)
-  const [location, setLocation] = useState({ lat: 0, lng: 0, placeName: '' })
+  const [location, setLocation] = useState({ lat: 39.8283, lng: -98.5795, placeName: '' }) // Default to center of US
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     defaultValues: {
       materialType: 'import',
       location: '',
-      latitude: 0,
-      longitude: 0
+      latitude: 39.8283,
+      longitude: -98.5795
     }
   })
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      if (!user) return
+    const loadUserLocation = async () => {
+      if (!user?.id) {
+        console.log('No user ID available, skipping profile fetch')
+        return
+      }
 
       try {
-        // Fetch user profile
-        const { data: profile, error } = await supabase
+        console.log('Attempting to fetch profile for user ID:', user.id)
+        
+        // First try to get the existing profile
+        let { data: profile, error: fetchError } = await supabase
           .from('user_profiles')
-          .select('zip_code')
+          .select('id, zip_code')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (error) throw error
+        // If no profile exists, create one
+        if (!profile && !fetchError) {
+          console.log('No profile found, creating new profile for user:', user.id)
+          
+          const { data: newProfile, error: insertError } = await supabase
+            .from('user_profiles')
+            .insert([{ id: user.id }])
+            .select('id, zip_code')
+            .single()
 
-        if (profile?.zip_code) {
-          // Convert zip code to coordinates using Mapbox Geocoding API
-          const response = await fetch(
-            `https://api.mapbox.com/geocoding/v5/mapbox.places/${profile.zip_code}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}&country=US&types=postcode`
-          )
-          const data = await response.json()
-
-          if (data.features && data.features.length > 0) {
-            const [lng, lat] = data.features[0].center
-            const placeName = data.features[0].place_name
-            setLocation({ lat, lng, placeName })
-            setValue('location', placeName)
-            setValue('latitude', lat)
-            setValue('longitude', lng)
+          if (insertError) {
+            console.log('Error creating profile:', insertError)
+            setMapboxError('Unable to create your profile. Please try again.')
+            return
           }
+
+          profile = newProfile
+        } else if (fetchError) {
+          console.log('Error fetching profile:', fetchError)
+          setMapboxError('Unable to fetch your profile information. Please try again.')
+          return
         }
+
+        console.log('Profile data:', {
+          hasId: Boolean(profile?.id),
+          hasZipCode: Boolean(profile?.zip_code),
+          zipCode: profile?.zip_code || 'Not provided'
+        })
+
+        if (!profile?.zip_code) {
+          setMapboxError('No zip code found in your profile. Please update your profile with a zip code.')
+          return
+        }
+
+        console.log('Attempting to geocode zip code:', profile.zip_code)
+
+        const mapboxResponse = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${profile.zip_code}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}&country=US&types=postcode`
+        )
+
+        if (!mapboxResponse.ok) {
+          const errorText = await mapboxResponse.text()
+          console.log('Mapbox API error:', {
+            status: mapboxResponse.status,
+            statusText: mapboxResponse.statusText,
+            error: errorText
+          })
+          setMapboxError('Failed to geocode your zip code. Please try again.')
+          return
+        }
+
+        const mapboxData = await mapboxResponse.json()
+
+        if (!mapboxData.features || mapboxData.features.length === 0) {
+          console.log('No location found for zip code:', profile.zip_code)
+          setMapboxError('Could not find location for your zip code. Please ensure it is valid.')
+          return
+        }
+
+        const [lng, lat] = mapboxData.features[0].center
+        const placeName = mapboxData.features[0].place_name
+        
+        console.log('Successfully found location:', {
+          placeName,
+          coordinates: [lat, lng]
+        })
+        
+        setLocation({ lat, lng, placeName })
+        setValue('location', placeName)
+        setValue('latitude', lat)
+        setValue('longitude', lng)
+
       } catch (error) {
-        console.error('Error fetching user profile:', error)
-        setMapboxError('Failed to load initial location')
+        // Log error safely
+        const errorInfo = error instanceof Error ? {
+          name: error.name,
+          message: error.message
+        } : 'Unknown error type'
+        
+        console.log('Caught error in loadUserLocation:', errorInfo)
+        setMapboxError('An unexpected error occurred while loading your location.')
       }
     }
 
-    fetchUserProfile()
+    loadUserLocation()
   }, [user, supabase, setValue])
 
   const handleLocationChange = (newLocation: { lat: number, lng: number, placeName: string }) => {
@@ -124,14 +189,21 @@ export default function NewListingPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Title</label>
-                <input
-                  type="text"
-                  {...register('title', { required: 'Title is required' })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                  placeholder="Enter a title for your listing"
-                />
-                {errors.title && <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>}
+                <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                  Site Name
+                </label>
+                <div className="mt-1">
+                  <input
+                    type="text"
+                    id="title"
+                    {...register('title', { required: 'Site name is required' })}
+                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="Enter site name"
+                  />
+                  {errors.title && (
+                    <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+                  )}
+                </div>
               </div>
 
               <div>
