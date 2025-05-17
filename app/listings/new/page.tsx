@@ -1,24 +1,32 @@
 'use client'
 
-import { useState, Suspense, lazy, useEffect } from 'react'
+import { useState, Suspense, lazy, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { MaterialType } from '@/types/materials'
+import type { MaterialType } from '@/app/types/materials'
 import { useAuth } from '@/contexts/AuthContext'
+
+// Add Mapbox imports
+import mapboxgl from 'mapbox-gl';
+import MapboxGeocoder from '@mapbox/mapbox-gl-geocoder';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css';
 
 // Lazy load the MapComponent
 const LazyMapComponent = lazy(() => import('@/components/MapComponent'))
 
 interface FormData {
-  title: string
+  site_name: string
   description: string
-  materialType: MaterialType
+  material_type: string
   quantity: number
   unit: string
   location: string
   latitude: number
   longitude: number
+  listing_type: 'Import' | 'Export'
+  status: 'active'
 }
 
 interface UserProfile {
@@ -35,27 +43,165 @@ export default function NewListingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [mapboxError, setMapboxError] = useState<string | null>(null)
   const [location, setLocation] = useState({ lat: 39.8283, lng: -98.5795, placeName: '' }) // Default to center of US
+  const [initialZoom, setInitialZoom] = useState(3) // Keep state for initial zoom
+  const geocoderContainerRef = useRef<HTMLDivElement>(null); // Add ref for geocoder container
+  const geocoderRef = useRef<MapboxGeocoder | null>(null); // Ref to store geocoder instance
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
-      materialType: undefined,
+      material_type: undefined,
       location: '',
       latitude: 39.8283,
-      longitude: -98.5795
+      longitude: -98.5795,
+      status: 'active'
     }
   })
 
   // Watch for material type changes
-  const selectedMaterialType = watch('materialType')
+  const selectedMaterialType = watch('material_type')
 
   // Update unit when material type changes
   useEffect(() => {
-    if (selectedMaterialType === 'soil') {
-      setValue('unit', 'Cubic Yards')
-    } else if (selectedMaterialType === 'structural_fill') {
-      setValue('unit', 'Tons')
+    switch (selectedMaterialType) {
+      case 'soil':
+      case 'structural_fill':
+        setValue('unit', 'Cubic Yards')
+        break
+      case 'gravel':
+        setValue('unit', 'Tons')
+        break
+      default:
+        setValue('unit', '')
     }
   }, [selectedMaterialType, setValue])
+
+  // Add geocoder initialization effect
+  useEffect(() => {
+    // Initialize Mapbox
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+
+    if (!mapboxgl.accessToken) {
+      console.error('Mapbox token is missing. Please check your environment variables.');
+      setMapboxError('Mapbox token is missing.');
+      return;
+    }
+
+    // Ensure mapboxgl is supported
+    if (!mapboxgl.supported()) {
+      console.error('Mapbox GL JS is not supported by this browser.');
+      setMapboxError('Mapbox GL JS is not supported by this browser.');
+      return;
+    }
+
+    // Create a dummy map instance for the geocoder
+    const dummyMap = new mapboxgl.Map({
+        container: document.createElement('div'),
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [location.lng, location.lat],
+        zoom: initialZoom,
+        interactive: false
+    }) as any;
+
+    const geocoder = new MapboxGeocoder({
+      accessToken: mapboxgl.accessToken,
+      mapboxgl: mapboxgl as any,
+      placeholder: 'Enter Address',
+      marker: false,
+      countries: 'us',
+      types: 'address,postcode,place,locality,neighborhood',
+      bbox: [-125.0, 24.396308, -66.934570, 49.384358],
+      proximity: location.lng && location.lat ? 
+        { longitude: location.lng, latitude: location.lat } : 
+        undefined,
+      language: 'en',
+      limit: 5,
+      minLength: 3,
+      collapsed: false,
+    });
+
+    geocoderRef.current = geocoder;
+
+    if (geocoderContainerRef.current) {
+      geocoderContainerRef.current.innerHTML = '';
+      const geocoderElement = geocoder.onAdd(dummyMap);
+      geocoderContainerRef.current.appendChild(geocoderElement);
+    }
+
+    // Handle geocoder result
+    geocoder.on('result', (e: any) => {
+      const [lng, lat] = e.result.center;
+      const placeName = e.result.place_name;
+      setLocation({ lat, lng, placeName });
+      setValue('location', placeName);
+      setValue('latitude', lat);
+      setValue('longitude', lng);
+      setInitialZoom(12);
+      
+      const geocoderInput = geocoderContainerRef.current?.querySelector('.mapboxgl-ctrl-geocoder input') as HTMLInputElement;
+      if (geocoderInput) {
+        geocoderInput.value = placeName;
+        geocoderInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    geocoder.on('clear', () => {
+      setLocation({ lat: 39.8283, lng: -98.5795, placeName: '' });
+      setValue('location', '');
+      setValue('latitude', 39.8283);
+      setValue('longitude', -98.5795);
+      setInitialZoom(3);
+      
+      const geocoderInput = geocoderContainerRef.current?.querySelector('.mapboxgl-ctrl-geocoder input') as HTMLInputElement;
+      if (geocoderInput) {
+        geocoderInput.value = '';
+        geocoderInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    return () => {
+      if (geocoderRef.current) {
+        geocoderRef.current.onRemove();
+        geocoderRef.current = null;
+      }
+      if(dummyMap) {
+        dummyMap.remove();
+      }
+    };
+  }, [location.lng, location.lat, initialZoom, setValue]);
+
+  // Handle location change from MapComponent (pin drag/click)
+  const handleLocationChange = async (newLocation: { lat: number, lng: number, placeName: string }) => {
+    setLocation(newLocation); // Update location state - placeName will be updated after reverse geocoding
+    setValue('latitude', newLocation.lat);
+    setValue('longitude', newLocation.lng);
+    
+    // Perform reverse geocoding to get the address for the new pin location
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${newLocation.lng},${newLocation.lat}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      const placeName = (data.features && data.features.length > 0) ? data.features[0].place_name : '';
+      
+      setValue('location', placeName); // Update form value with fetched place name
+      // Also update the location state with the placeName for display if needed elsewhere
+      setLocation(prevLocation => ({ ...prevLocation, placeName }));
+
+      // Update geocoder input value with the fetched address
+      const geocoderInput = geocoderContainerRef.current?.querySelector('.mapboxgl-ctrl-geocoder input') as HTMLInputElement;
+      if (geocoderInput) {
+          geocoderInput.value = placeName;
+      }
+
+    } catch (error) {
+      console.error('Error during reverse geocoding on location change:', error);
+      setValue('location', ''); // Clear location in form if reverse geocoding fails
+       const geocoderInput = geocoderContainerRef.current?.querySelector('.mapboxgl-ctrl-geocoder input') as HTMLInputElement;
+       if (geocoderInput) {
+           geocoderInput.value = ''; // Clear geocoder input as well
+       }
+    }
+  };
 
   const loadUserLocation = async () => {
     try {
@@ -81,10 +227,11 @@ export default function NewListingPage() {
 
       if (data.features && data.features.length > 0) {
         const [lng, lat] = data.features[0].center
-        setLocation({ lat, lng, placeName: '' })
-        setValue('location', '')
+        setLocation({ lat, lng, placeName: data.features[0].place_name || zipCode })
+        setValue('location', data.features[0].place_name || zipCode)
         setValue('latitude', lat)
         setValue('longitude', lng)
+        setInitialZoom(12) // Set zoom to 12 if zip code found
       }
     } catch (error) {
       console.error('Error loading user location:', error)
@@ -95,13 +242,6 @@ export default function NewListingPage() {
     loadUserLocation()
   }, [user, supabase, setValue])
 
-  const handleLocationChange = (newLocation: { lat: number, lng: number, placeName: string }) => {
-    setLocation(newLocation)
-    setValue('location', newLocation.placeName)
-    setValue('latitude', newLocation.lat)
-    setValue('longitude', newLocation.lng)
-  }
-
   const onSubmit = async (data: FormData) => {
     try {
       setIsSubmitting(true)
@@ -109,7 +249,8 @@ export default function NewListingPage() {
         .from('listings')
         .insert([{
           ...data,
-          user_id: user?.id
+          user_id: user?.id,
+          status: 'active' // Explicitly set status to lowercase 'active'
         }])
 
       if (error) throw error
@@ -124,6 +265,32 @@ export default function NewListingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <style jsx global>{`
+        .mapboxgl-ctrl-geocoder {
+          width: 100% !important;
+          max-width: none !important;
+          box-shadow: none !important;
+          background: none !important;
+        }
+        .mapboxgl-ctrl-geocoder input {
+          width: 100% !important;
+          height: 38px !important;
+          padding: 0.5rem !important;
+          padding-left: 40px !important;
+          border: 1px solid #d1d5db !important;
+          border-radius: 0.375rem !important;
+          background-color: white !important;
+          box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        }
+        .mapboxgl-ctrl-geocoder--icon-search {
+          left: 8px !important;
+        }
+        .mapboxgl-ctrl-geocoder--results {
+          z-index: 10000 !important;
+          width: 100% !important;
+          max-width: none !important;
+        }
+      `}</style>
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8">
           <div className="mb-8">
@@ -134,19 +301,19 @@ export default function NewListingPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-4">
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="site_name" className="block text-sm font-medium text-gray-700">
                   Site Name
                 </label>
                 <div className="mt-1">
                   <input
                     type="text"
-                    id="title"
-                    {...register('title', { required: 'Site name is required' })}
+                    id="site_name"
+                    {...register('site_name', { required: 'Site name is required' })}
                     className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
                     placeholder="Enter site name"
                   />
-                  {errors.title && (
-                    <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+                  {errors.site_name && (
+                    <p className="mt-1 text-sm text-red-600">{errors.site_name.message}</p>
                   )}
                 </div>
               </div>
@@ -166,7 +333,7 @@ export default function NewListingPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Material Type</label>
                 <select
-                  {...register('materialType', { required: 'Material type is required' })}
+                  {...register('material_type', { required: 'Material type is required' })}
                   className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
                 >
                   <option value="">Select material type</option>
@@ -174,7 +341,7 @@ export default function NewListingPage() {
                   <option value="gravel">Gravel</option>
                   <option value="structural_fill">Structural Fill</option>
                 </select>
-                {errors.materialType && <p className="mt-1 text-sm text-red-600">{errors.materialType.message}</p>}
+                {errors.material_type && <p className="mt-1 text-sm text-red-600">{errors.material_type.message}</p>}
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -186,7 +353,6 @@ export default function NewListingPage() {
                     step="0.01"
                     {...register('quantity', { 
                       required: 'Quantity is required',
-                      min: { value: 0, message: 'Quantity must be positive' }
                     })}
                     className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
                     placeholder="Enter quantity"
@@ -198,9 +364,9 @@ export default function NewListingPage() {
                   <label className="block text-sm font-medium text-gray-700">Unit</label>
                   <input
                     type="text"
-                    {...register('unit', { required: 'Unit is required' })}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
-                    placeholder="e.g., tons, cubic yards"
+                    {...register('unit')}
+                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black bg-gray-50"
+                    placeholder="Unit will be set automatically"
                     readOnly
                   />
                   {errors.unit && <p className="mt-1 text-sm text-red-600">{errors.unit.message}</p>}
@@ -208,16 +374,42 @@ export default function NewListingPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">Location</label>
+                <label className="block text-sm font-medium text-gray-700">Listing Type</label>
+                <select
+                  {...register('listing_type', { required: 'Listing type is required' })}
+                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
+                >
+                  <option value="">Select listing type</option>
+                  <option value="Import">Import</option>
+                  <option value="Export">Export</option>
+                </select>
+                {errors.listing_type && <p className="mt-1 text-sm text-red-600">{errors.listing_type.message}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Address</label>
+                <div ref={geocoderContainerRef} className="mt-1 w-full rounded-lg" style={{ zIndex: 10, overflow: 'visible !important' }}></div>
+                {/* The geocoder input will be rendered inside the div above */}
+                <input type="hidden" {...register('location')} />
+                <input type="hidden" {...register('latitude')} />
+                <input type="hidden" {...register('longitude')} />
+                {mapboxError && <p className="mt-1 text-sm text-red-600">{mapboxError}</p>}
+                 {/* We can optionally display the selected address text here if needed */}
+                 {/* {location.placeName && !mapboxError && (
+                  <p className="mt-1 text-sm text-gray-600">
+                    Selected Address: {location.placeName}
+                  </p>
+                )} */}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Map View</label>
                 <div className="mt-1 space-y-2">
-                  <div id="geocoder-container" className="rounded-lg overflow-hidden"></div>
-                  <div className="h-64 rounded-lg border border-gray-300 overflow-hidden">
+                  <div className="h-80 lg:h-96 rounded-lg border border-gray-300">
                     <div id="map" className="h-full w-full"></div>
                   </div>
-                  <input type="hidden" {...register('location')} />
-                  <input type="hidden" {...register('latitude')} />
-                  <input type="hidden" {...register('longitude')} />
-                  {mapboxError && <p className="mt-1 text-sm text-red-600">{mapboxError}</p>}
+                  {/* Hidden inputs are now placed near the geocoder container */}
+                  {/* Mapbox error display remains */}
                   <Suspense fallback={
                     <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -227,6 +419,7 @@ export default function NewListingPage() {
                       initialLocation={location}
                       onLocationChange={handleLocationChange}
                       onError={setMapboxError}
+                      initialZoom={initialZoom} // Pass the initialZoom state
                     />
                   </Suspense>
                 </div>
