@@ -67,49 +67,35 @@ export default function NewListingPage() {
       try {
         console.log('Attempting to fetch profile for user ID:', user.id)
         
-        // First try to get the existing profile
-        let { data: profile, error: fetchError } = await supabase
+        const { data: profile, error: fetchError } = await supabase
           .from('user_profiles')
-          .select('id, zip_code')
-          .eq('id', user.id)
+          .select('user_id, zip_code')
+          .eq('user_id', user.id)
           .maybeSingle()
 
-        // If no profile exists, create one
-        if (!profile && !fetchError) {
-          console.log('No profile found, creating new profile for user:', user.id)
-          
-          const { data: newProfile, error: insertError } = await supabase
-            .from('user_profiles')
-            .insert([{ id: user.id }])
-            .select('id, zip_code')
-            .single()
-
-          if (insertError) {
-            console.log('Error creating profile:', insertError)
-            setMapboxError('Unable to create your profile. Please try again.')
-            return
-          }
-
-          profile = newProfile
-        } else if (fetchError) {
+        if (fetchError) {
           console.log('Error fetching profile:', fetchError)
           setMapboxError('Unable to fetch your profile information. Please try again.')
           return
         }
 
+        if (!profile) {
+          setMapboxError('Please set up your profile with a zip code before creating a listing.')
+          return
+        }
+
+        if (!profile.zip_code) {
+          setMapboxError('Please add a zip code to your profile before creating a listing.')
+          return
+        }
+
         console.log('Profile data:', {
-          hasId: Boolean(profile?.id),
+          hasUserId: Boolean(profile?.user_id),
           hasZipCode: Boolean(profile?.zip_code),
           zipCode: profile?.zip_code || 'Not provided'
         })
 
-        if (!profile?.zip_code) {
-          setMapboxError('No zip code found in your profile. Please update your profile with a zip code.')
-          return
-        }
-
-        console.log('Attempting to geocode zip code:', profile.zip_code)
-
+        // Convert zip code to coordinates using Mapbox Geocoding API
         const mapboxResponse = await fetch(
           `https://api.mapbox.com/geocoding/v5/mapbox.places/${profile.zip_code}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}&country=US&types=postcode`
         )
@@ -147,7 +133,6 @@ export default function NewListingPage() {
         setValue('longitude', lng)
 
       } catch (error) {
-        // Log error safely
         const errorInfo = error instanceof Error ? {
           name: error.name,
           message: error.message
