@@ -16,7 +16,6 @@ interface FormData {
   materialType: MaterialType
   quantity: number
   unit: string
-  price: number
   location: string
   latitude: number
   longitude: number
@@ -37,14 +36,26 @@ export default function NewListingPage() {
   const [mapboxError, setMapboxError] = useState<string | null>(null)
   const [location, setLocation] = useState({ lat: 39.8283, lng: -98.5795, placeName: '' }) // Default to center of US
 
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
-      materialType: 'import',
+      materialType: undefined,
       location: '',
       latitude: 39.8283,
       longitude: -98.5795
     }
   })
+
+  // Watch for material type changes
+  const selectedMaterialType = watch('materialType')
+
+  // Update unit when material type changes
+  useEffect(() => {
+    if (selectedMaterialType === 'soil') {
+      setValue('unit', 'Cubic Yards')
+    } else if (selectedMaterialType === 'structural_fill') {
+      setValue('unit', 'Tons')
+    }
+  }, [selectedMaterialType, setValue])
 
   useEffect(() => {
     const loadUserLocation = async () => {
@@ -197,7 +208,7 @@ export default function NewListingPage() {
                     type="text"
                     id="title"
                     {...register('title', { required: 'Site name is required' })}
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
                     placeholder="Enter site name"
                   />
                   {errors.title && (
@@ -209,10 +220,11 @@ export default function NewListingPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Description</label>
                 <textarea
-                  {...register('description', { required: 'Description is required' })}
+                  id="description"
                   rows={4}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                  placeholder="Describe your listing in detail"
+                  {...register('description', { required: 'Description is required' })}
+                  className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
+                  placeholder="Describe your listing"
                 />
                 {errors.description && <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>}
               </div>
@@ -221,10 +233,12 @@ export default function NewListingPage() {
                 <label className="block text-sm font-medium text-gray-700">Material Type</label>
                 <select
                   {...register('materialType', { required: 'Material type is required' })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
                 >
-                  <option value="import">Import - Looking for material</option>
-                  <option value="export">Export - Have excess material</option>
+                  <option value="">Select material type</option>
+                  <option value="soil">Soil</option>
+                  <option value="gravel">Gravel</option>
+                  <option value="structural_fill">Structural Fill</option>
                 </select>
                 {errors.materialType && <p className="mt-1 text-sm text-red-600">{errors.materialType.message}</p>}
               </div>
@@ -234,9 +248,14 @@ export default function NewListingPage() {
                   <label className="block text-sm font-medium text-gray-700">Quantity</label>
                   <input
                     type="number"
-                    {...register('quantity', { required: 'Quantity is required', min: 0 })}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    placeholder="0"
+                    id="quantity"
+                    step="0.01"
+                    {...register('quantity', { 
+                      required: 'Quantity is required',
+                      min: { value: 0, message: 'Quantity must be positive' }
+                    })}
+                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
+                    placeholder="Enter quantity"
                   />
                   {errors.quantity && <p className="mt-1 text-sm text-red-600">{errors.quantity.message}</p>}
                 </div>
@@ -246,28 +265,12 @@ export default function NewListingPage() {
                   <input
                     type="text"
                     {...register('unit', { required: 'Unit is required' })}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black"
                     placeholder="e.g., tons, cubic yards"
+                    readOnly
                   />
                   {errors.unit && <p className="mt-1 text-sm text-red-600">{errors.unit.message}</p>}
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Price</label>
-                <div className="mt-1 relative rounded-lg shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">$</span>
-                  </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    {...register('price', { required: 'Price is required', min: 0 })}
-                    className="block w-full pl-7 rounded-lg border-gray-300 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    placeholder="0.00"
-                  />
-                </div>
-                {errors.price && <p className="mt-1 text-sm text-red-600">{errors.price.message}</p>}
               </div>
 
               <div>

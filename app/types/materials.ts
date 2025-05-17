@@ -1,0 +1,1 @@
+export type MaterialType = 'soil' | 'gravel' | 'structural_fill'; 
