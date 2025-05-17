@@ -24,6 +24,12 @@ type Listing = {
   longitude: number
 }
 
+type FilterOptions = {
+  distance: 'distance_5' | 'distance_10' | 'distance_25' | 'distance_50' | 'distance_50plus' | 'all'
+  materialTypes: string[]
+  quantity: 'asc' | 'desc' | 'all'
+}
+
 // Add distance calculation function
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 3959; // Earth's radius in miles
@@ -82,6 +88,12 @@ export default function ListingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [activeTab, setActiveTab] = useState<'import' | 'export'>('import')
+  const [filters, setFilters] = useState<FilterOptions>({
+    distance: 'all',
+    materialTypes: [],
+    quantity: 'all'
+  })
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
   const { user } = useAuth()
 
   useEffect(() => {
@@ -153,6 +165,97 @@ export default function ListingsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const getDistanceRange = (distance: number): FilterOptions['distance'] => {
+    if (distance < 5) return 'distance_5'
+    if (distance < 10) return 'distance_10'
+    if (distance < 25) return 'distance_25'
+    if (distance < 50) return 'distance_50'
+    return 'distance_50plus'
+  }
+
+  const filterAndSortListings = (listings: Listing[]) => {
+    return [...listings]
+      .filter(listing => {
+        // Filter by material type
+        if (filters.materialTypes.length > 0 && !filters.materialTypes.includes(listing.material_type)) {
+          return false
+        }
+
+        // Filter by distance
+        if (filters.distance !== 'all' && userLocation) {
+          const distance = calculateDistance(
+            userLocation.lat,
+            userLocation.lng,
+            listing.latitude,
+            listing.longitude
+          )
+          
+          switch (filters.distance) {
+            case 'distance_5':
+              if (distance >= 5) return false
+              break
+            case 'distance_10':
+              if (distance >= 10) return false
+              break
+            case 'distance_25':
+              if (distance >= 25) return false
+              break
+            case 'distance_50':
+              if (distance >= 50) return false
+              break
+            case 'distance_50plus':
+              if (distance < 50) return false
+              break
+          }
+        }
+
+        return true
+      })
+      .sort((a, b) => {
+        // Sort by quantity if specified
+        if (filters.quantity !== 'all') {
+          return filters.quantity === 'asc' 
+            ? a.quantity - b.quantity 
+            : b.quantity - a.quantity
+        }
+
+        // Default sort by distance if no quantity sort
+        if (userLocation) {
+          const distanceA = calculateDistance(
+            userLocation.lat,
+            userLocation.lng,
+            a.latitude,
+            a.longitude
+          )
+          const distanceB = calculateDistance(
+            userLocation.lat,
+            userLocation.lng,
+            b.latitude,
+            b.longitude
+          )
+          return distanceA - distanceB
+        }
+
+        return 0
+      })
+  }
+
+  const handleMaterialTypeChange = (materialType: string) => {
+    setFilters(prevFilters => {
+      if (prevFilters.materialTypes.includes(materialType)) {
+        return {
+          ...prevFilters,
+          materialTypes: prevFilters.materialTypes.filter(type => type !== materialType)
+        }
+      } else {
+        return {
+          ...prevFilters,
+          materialTypes: [...prevFilters.materialTypes, materialType]
+        }
+      }
+    })
   }
 
   if (loading) {
@@ -236,30 +339,234 @@ export default function ListingsPage() {
         {/* Navigation Bar */}
         <div className="sticky top-16 z-10 bg-gray-50 py-4 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 border-b border-gray-200 mb-8">
           <div className="max-w-7xl mx-auto">
-            <nav className="flex space-x-4 sm:space-x-8">
-              <button
-                onClick={() => setActiveTab('import')}
-                className={`text-sm font-medium px-3 py-2 border-b-2 transition-colors duration-200 ${
-                  activeTab === 'import'
-                    ? 'text-indigo-600 border-indigo-600'
-                    : 'text-gray-500 border-transparent hover:text-indigo-600 hover:border-indigo-600'
-                }`}
-              >
-                Import Listings
-              </button>
-              <button
-                onClick={() => setActiveTab('export')}
-                className={`text-sm font-medium px-3 py-2 border-b-2 transition-colors duration-200 ${
-                  activeTab === 'export'
-                    ? 'text-indigo-600 border-indigo-600'
-                    : 'text-gray-500 border-transparent hover:text-indigo-600 hover:border-indigo-600'
-                }`}
-              >
-                Export Listings
-              </button>
-            </nav>
+            <div className="flex flex-col space-y-4">
+              <nav className="flex justify-center space-x-4 sm:space-x-8">
+                <button
+                  onClick={() => setActiveTab('import')}
+                  className={`text-sm font-medium px-3 py-2 border-b-2 transition-colors duration-200 ${
+                    activeTab === 'import'
+                      ? 'text-indigo-600 border-indigo-600'
+                      : 'text-gray-500 border-transparent hover:text-indigo-600 hover:border-indigo-600'
+                  }`}
+                >
+                  Import Listings
+                </button>
+                <button
+                  onClick={() => setActiveTab('export')}
+                  className={`text-sm font-medium px-3 py-2 border-b-2 transition-colors duration-200 ${
+                    activeTab === 'export'
+                      ? 'text-indigo-600 border-indigo-600'
+                      : 'text-gray-500 border-transparent hover:text-indigo-600 hover:border-indigo-600'
+                  }`}
+                >
+                  Export Listings
+                </button>
+              </nav>
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={() => setShowFilterPanel(true)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Sort & Filter
+                </button>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Sort and Filter Panel (initially hidden) */}
+        {showFilterPanel && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-50 bg-opacity-75 transition-opacity">
+            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+              <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                  <h3 className="text-lg font-semibold leading-6 text-gray-900" id="modal-title">
+                    Sort & Filter Listings
+                  </h3>
+                  <div className="mt-4 space-y-6">
+                    {/* Distance Filter (Radio Buttons for single selection) */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 mb-2">Distance</p>
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center">
+                          <input
+                            id="distance-all"
+                            name="distance"
+                            type="radio"
+                            value="all"
+                            checked={filters.distance === 'all'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, distance: e.target.value as FilterOptions['distance'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="distance-all" className="ml-3 text-sm text-gray-600">All Distances</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="distance-5"
+                            name="distance"
+                            type="radio"
+                            value="distance_5"
+                            checked={filters.distance === 'distance_5'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, distance: e.target.value as FilterOptions['distance'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="distance-5" className="ml-3 text-sm text-gray-600">Less than 5 miles</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="distance-10"
+                            name="distance"
+                            type="radio"
+                            value="distance_10"
+                            checked={filters.distance === 'distance_10'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, distance: e.target.value as FilterOptions['distance'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="distance-10" className="ml-3 text-sm text-gray-600">Less than 10 miles</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="distance-25"
+                            name="distance"
+                            type="radio"
+                            value="distance_25"
+                            checked={filters.distance === 'distance_25'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, distance: e.target.value as FilterOptions['distance'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="distance-25" className="ml-3 text-sm text-gray-600">Less than 25 miles</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="distance-50"
+                            name="distance"
+                            type="radio"
+                            value="distance_50"
+                            checked={filters.distance === 'distance_50'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, distance: e.target.value as FilterOptions['distance'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="distance-50" className="ml-3 text-sm text-gray-600">Less than 50 miles</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="distance-50plus"
+                            name="distance"
+                            type="radio"
+                            value="distance_50plus"
+                            checked={filters.distance === 'distance_50plus'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, distance: e.target.value as FilterOptions['distance'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="distance-50plus" className="ml-3 text-sm text-gray-600">More than 50 miles</label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Material Type Filter (Checkboxes for multi-selection) */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 mb-2">Material Type</p>
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center">
+                          <input
+                            id="material-soil"
+                            type="checkbox"
+                            value="soil"
+                            checked={filters.materialTypes.includes('soil')}
+                            onChange={() => handleMaterialTypeChange('soil')}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="material-soil" className="ml-3 text-sm text-gray-600">Soil</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="material-gravel"
+                            type="checkbox"
+                            value="gravel"
+                            checked={filters.materialTypes.includes('gravel')}
+                            onChange={() => handleMaterialTypeChange('gravel')}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="material-gravel" className="ml-3 text-sm text-gray-600">Gravel</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="material-structural-fill"
+                            type="checkbox"
+                            value="structural_fill"
+                            checked={filters.materialTypes.includes('structural_fill')}
+                            onChange={() => handleMaterialTypeChange('structural_fill')}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="material-structural-fill" className="ml-3 text-sm text-gray-600">Structural Fill</label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quantity Sort (Radio Buttons for single selection) */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 mb-2">Sort by Quantity</p>
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center">
+                          <input
+                            id="quantity-all"
+                            name="quantity"
+                            type="radio"
+                            value="all"
+                            checked={filters.quantity === 'all'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, quantity: e.target.value as FilterOptions['quantity'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="quantity-all" className="ml-3 text-sm text-gray-600">Default</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="quantity-asc"
+                            name="quantity"
+                            type="radio"
+                            value="asc"
+                            checked={filters.quantity === 'asc'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, quantity: e.target.value as FilterOptions['quantity'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="quantity-asc" className="ml-3 text-sm text-gray-600">Lowest to Highest</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            id="quantity-desc"
+                            name="quantity"
+                            type="radio"
+                            value="desc"
+                            checked={filters.quantity === 'desc'}
+                            onChange={(e) => setFilters(prev => ({ ...prev, quantity: e.target.value as FilterOptions['quantity'] }))}
+                            className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          />
+                          <label htmlFor="quantity-desc" className="ml-3 text-sm text-gray-600">Highest to Lowest</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                  <button
+                    type="button"
+                    className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:ml-3 sm:w-auto"
+                    onClick={() => setShowFilterPanel(false)}
+                  >
+                    Apply Filters
+                  </button>
+                  <button
+                    type="button"
+                    className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                    onClick={() => setShowFilterPanel(false)} // Close for now
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Listings Grid */}
         <div className="space-y-8">
@@ -267,8 +574,7 @@ export default function ListingsPage() {
           <div id="import-listings" className={`${activeTab === 'import' ? 'block' : 'hidden sm:block'}`}>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Import Listings</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {listings
-                .filter(listing => listing.listing_type === 'Import')
+              {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Import'))
                 .map((listing) => {
                   const materialStyles = getMaterialTypeStyles(listing.material_type)
                   const distance = userLocation && listing.latitude && listing.longitude
@@ -376,8 +682,7 @@ export default function ListingsPage() {
           <div id="export-listings" className={`${activeTab === 'export' ? 'block' : 'hidden sm:block'}`}>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Export Listings</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {listings
-                .filter(listing => listing.listing_type === 'Export')
+              {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Export'))
                 .map((listing) => {
                   const materialStyles = getMaterialTypeStyles(listing.material_type)
                   const distance = userLocation && listing.latitude && listing.longitude
