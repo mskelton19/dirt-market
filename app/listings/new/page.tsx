@@ -57,92 +57,41 @@ export default function NewListingPage() {
     }
   }, [selectedMaterialType, setValue])
 
-  useEffect(() => {
-    const loadUserLocation = async () => {
-      if (!user?.id) {
-        console.log('No user ID available, skipping profile fetch')
+  const loadUserLocation = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        console.error('No authenticated user found')
         return
       }
 
-      try {
-        console.log('Attempting to fetch profile for user ID:', user.id)
-        
-        const { data: profile, error: fetchError } = await supabase
-          .from('user_profiles')
-          .select('user_id, zip_code')
-          .eq('user_id', user.id)
-          .maybeSingle()
+      const zipCode = user.user_metadata?.zip_code
+      
+      if (!zipCode) {
+        console.error('No zip code found in user metadata')
+        return
+      }
 
-        if (fetchError) {
-          console.log('Error fetching profile:', fetchError)
-          setMapboxError('Unable to fetch your profile information. Please try again.')
-          return
-        }
+      // Convert zip code to coordinates using Mapbox
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${zipCode}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
+      )
+      const data = await response.json()
 
-        if (!profile) {
-          setMapboxError('Please set up your profile with a zip code before creating a listing.')
-          return
-        }
-
-        if (!profile.zip_code) {
-          setMapboxError('Please add a zip code to your profile before creating a listing.')
-          return
-        }
-
-        console.log('Profile data:', {
-          hasUserId: Boolean(profile?.user_id),
-          hasZipCode: Boolean(profile?.zip_code),
-          zipCode: profile?.zip_code || 'Not provided'
-        })
-
-        // Convert zip code to coordinates using Mapbox Geocoding API
-        const mapboxResponse = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${profile.zip_code}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}&country=US&types=postcode`
-        )
-
-        if (!mapboxResponse.ok) {
-          const errorText = await mapboxResponse.text()
-          console.log('Mapbox API error:', {
-            status: mapboxResponse.status,
-            statusText: mapboxResponse.statusText,
-            error: errorText
-          })
-          setMapboxError('Failed to geocode your zip code. Please try again.')
-          return
-        }
-
-        const mapboxData = await mapboxResponse.json()
-
-        if (!mapboxData.features || mapboxData.features.length === 0) {
-          console.log('No location found for zip code:', profile.zip_code)
-          setMapboxError('Could not find location for your zip code. Please ensure it is valid.')
-          return
-        }
-
-        const [lng, lat] = mapboxData.features[0].center
-        const placeName = mapboxData.features[0].place_name
-        
-        console.log('Successfully found location:', {
-          placeName,
-          coordinates: [lat, lng]
-        })
-        
-        setLocation({ lat, lng, placeName })
-        setValue('location', placeName)
+      if (data.features && data.features.length > 0) {
+        const [lng, lat] = data.features[0].center
+        setLocation({ lat, lng, placeName: '' })
+        setValue('location', '')
         setValue('latitude', lat)
         setValue('longitude', lng)
-
-      } catch (error) {
-        const errorInfo = error instanceof Error ? {
-          name: error.name,
-          message: error.message
-        } : 'Unknown error type'
-        
-        console.log('Caught error in loadUserLocation:', errorInfo)
-        setMapboxError('An unexpected error occurred while loading your location.')
       }
+    } catch (error) {
+      console.error('Error loading user location:', error)
     }
+  }
 
+  useEffect(() => {
     loadUserLocation()
   }, [user, supabase, setValue])
 

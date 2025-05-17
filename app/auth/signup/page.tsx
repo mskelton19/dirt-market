@@ -2,78 +2,71 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/AuthContext'
-import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Link from 'next/link'
 
 export default function SignUpPage() {
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    company_name: '',
+    position: '',
+    zipCode: ''
+  })
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-  const { signUp } = useAuth()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState('')
+  const supabase = createClientComponentClient()
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setIsSubmitting(true)
-
-    const formData = new FormData(e.currentTarget)
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-    const firstName = formData.get('firstName') as string
-    const lastName = formData.get('lastName') as string
-    const company = formData.get('company') as string
-    const position = formData.get('position') as string
-    const zipCode = formData.get('zipCode') as string
+    setError(null)
+    setIsLoading(true)
 
     try {
-      // First, sign up the user
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
+      // Sign up the user with metadata
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            company_name: formData.company_name,
+            position: formData.position,
+            zip_code: formData.zipCode
+          }
+        }
       })
 
-      if (signUpError) {
-        console.error('Sign up error:', signUpError)
-        throw signUpError
-      }
+      if (signUpError) throw signUpError
 
-      // If we have a user, create their profile using the admin client
-      if (signUpData?.user) {
-        console.log('Creating user profile for:', signUpData.user.id)
-        
-        // Use supabaseAdmin to bypass RLS
-        const { error: profileError } = await supabaseAdmin
-          .from('user_profiles')
-          .insert([{
-            user_id: signUpData.user.id,
-            first_name: firstName,
-            last_name: lastName,
-            company: company,
-            position: position,
-            zip_code: zipCode
-          }])
-
-        if (profileError) {
-          console.error('Profile creation error details:', profileError)
-          throw new Error(`Failed to create profile: ${profileError.message}`)
-        }
-
-        // Show success message and redirect
-        router.push('/auth/verify-email')
-      } else {
+      if (!authData.user) {
         throw new Error('No user data after signup')
       }
-    } catch (error: any) {
+
+      // Redirect to verification page after successful signup
+      router.push('/auth/verify')
+    } catch (error) {
       console.error('Full error details:', error)
-      setError(error.message || 'An error occurred during sign up. Please try again.')
+      setError('Failed to create account. Please try again.')
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h1 className="text-4xl font-bold text-gray-900 text-center mb-4">
           Try Dirt Market
@@ -97,6 +90,8 @@ export default function SignUpPage() {
                   name="firstName"
                   type="text"
                   required
+                  value={formData.firstName}
+                  onChange={handleChange}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
                 />
               </div>
@@ -111,6 +106,8 @@ export default function SignUpPage() {
                   name="lastName"
                   type="text"
                   required
+                  value={formData.lastName}
+                  onChange={handleChange}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
                 />
               </div>
@@ -127,6 +124,8 @@ export default function SignUpPage() {
                 type="email"
                 autoComplete="email"
                 required
+                value={formData.email}
+                onChange={handleChange}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
               />
             </div>
@@ -142,20 +141,24 @@ export default function SignUpPage() {
                 type="password"
                 autoComplete="new-password"
                 required
+                value={formData.password}
+                onChange={handleChange}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
               />
             </div>
 
             {/* Company */}
             <div>
-              <label htmlFor="company" className="block text-sm font-medium text-gray-900 mb-1">
+              <label htmlFor="company_name" className="block text-sm font-medium text-gray-900 mb-1">
                 Company name <span className="text-red-500">*</span>
               </label>
               <input
-                id="company"
-                name="company"
+                id="company_name"
+                name="company_name"
                 type="text"
                 required
+                value={formData.company_name}
+                onChange={handleChange}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
               />
             </div>
@@ -169,10 +172,11 @@ export default function SignUpPage() {
                 id="position"
                 name="position"
                 required
-                defaultValue=""
+                value={formData.position}
+                onChange={handleChange}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900"
               >
-                <option value="" disabled>Select your position</option>
+                <option value="">Select your position</option>
                 <option value="Foreman/Site Superintendent">Foreman/Site Superintendent</option>
                 <option value="Project Manager">Project Manager</option>
                 <option value="Estimator">Estimator</option>
@@ -190,6 +194,8 @@ export default function SignUpPage() {
                 type="text"
                 required
                 pattern="[0-9]{5}"
+                value={formData.zipCode}
+                onChange={handleChange}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
               />
             </div>
@@ -212,10 +218,10 @@ export default function SignUpPage() {
             <div>
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#1a365d] hover:bg-[#2c5282] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1a365d] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Creating account...' : 'Create Account'}
+                {isLoading ? 'Creating account...' : 'Create Account'}
               </button>
             </div>
           </form>
