@@ -22,12 +22,20 @@ type Listing = {
   listing_type: string
   latitude: number
   longitude: number
+  user_email?: string
+  user_phone?: string
 }
 
 type FilterOptions = {
   distance: 'distance_5' | 'distance_10' | 'distance_25' | 'distance_50' | 'distance_50plus' | 'all'
   materialTypes: string[]
   quantity: 'asc' | 'desc' | 'all'
+}
+
+type User = {
+  id: string
+  email: string
+  phone: string
 }
 
 // Add distance calculation function
@@ -143,24 +151,14 @@ export default function ListingsPage() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('Supabase error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        })
+        console.error('Supabase error details:', error)
         throw error
       }
 
       console.log('Fetched listings:', data)
       setListings(data || [])
     } catch (error: any) {
-      console.error('Error fetching listings:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      })
+      console.error('Error fetching listings:', error)
       setError(error.message || 'Failed to load listings')
     } finally {
       setLoading(false)
@@ -651,25 +649,73 @@ export default function ListingsPage() {
                           </span>
                         </div>
                         <div className="mt-4 pt-4 border-t">
-                          <Link
-                            href={`/listings/${listing.id}`}
-                            className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                          >
-                            View Details
-                            <svg
-                              className="ml-1 h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          </Link>
+                          <div className="flex flex-col space-y-3">
+                            <div className="flex justify-between items-center">
+                              <Link
+                                href={`/listings/${listing.id}`}
+                                className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                              >
+                                View Details
+                                <svg
+                                  className="ml-1 h-4 w-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5l7 7-7 7"
+                                  />
+                                </svg>
+                              </Link>
+                            </div>
+                            <div className="flex flex-col space-y-2">
+                              {listing.user_email && (
+                                <a
+                                  href={`mailto:${listing.user_email}`}
+                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                  <svg
+                                    className="h-4 w-4 mr-2 text-gray-500"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                    />
+                                  </svg>
+                                  Email Company
+                                </a>
+                              )}
+                              {listing.user_phone && (
+                                <a
+                                  href={`tel:${listing.user_phone}`}
+                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                  <svg
+                                    className="h-4 w-4 mr-2 text-gray-500"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                    />
+                                  </svg>
+                                  Call Company
+                                </a>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -746,25 +792,73 @@ export default function ListingsPage() {
                           </span>
                         </div>
                         <div className="mt-4 pt-4 border-t">
-                          <Link
-                            href={`/listings/${listing.id}`}
-                            className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                          >
-                            View Details
-                            <svg
-                              className="ml-1 h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          </Link>
+                          <div className="flex flex-col space-y-3">
+                            <div className="flex justify-between items-center">
+                              <Link
+                                href={`/listings/${listing.id}`}
+                                className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                              >
+                                View Details
+                                <svg
+                                  className="ml-1 h-4 w-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5l7 7-7 7"
+                                  />
+                                </svg>
+                              </Link>
+                            </div>
+                            <div className="flex flex-col space-y-2">
+                              {listing.user_email && (
+                                <a
+                                  href={`mailto:${listing.user_email}`}
+                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                  <svg
+                                    className="h-4 w-4 mr-2 text-gray-500"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                    />
+                                  </svg>
+                                  Email Company
+                                </a>
+                              )}
+                              {listing.user_phone && (
+                                <a
+                                  href={`tel:${listing.user_phone}`}
+                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                  <svg
+                                    className="h-4 w-4 mr-2 text-gray-500"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                    />
+                                  </svg>
+                                  Call Company
+                                </a>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

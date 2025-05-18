@@ -27,6 +27,12 @@ interface FormData {
   longitude: number
   listing_type: 'Import' | 'Export'
   status: 'active'
+  user_email: string
+  user_phone: string
+  contact_first_name: string
+  contact_email: string
+  contact_phone: string
+  contact_company: string
 }
 
 interface UserProfile {
@@ -245,19 +251,53 @@ export default function NewListingPage() {
   const onSubmit = async (data: FormData) => {
     try {
       setIsSubmitting(true)
-      const { error } = await supabase
+      
+      // Get user data
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError) {
+        console.error('Error getting user:', userError)
+        throw new Error(`Failed to get user: ${userError.message}`)
+      }
+      
+      if (!user) {
+        throw new Error('No authenticated user found')
+      }
+
+      // Extract user information from auth.user
+      const userMetadata = user.user_metadata || {}
+      const contactInfo = {
+        contact_first_name: userMetadata.first_name || '',
+        contact_email: user.email || '',
+        contact_phone: userMetadata.phone || '',
+        contact_company: userMetadata.company_name || ''
+      }
+
+      // Log the data being sent to Supabase
+      console.log('Creating listing with data:', {
+        ...data,
+        ...contactInfo,
+        user_id: user.id,
+        status: 'active'
+      })
+
+      const { error: insertError } = await supabase
         .from('listings')
         .insert([{
           ...data,
-          user_id: user?.id,
-          status: 'active' // Explicitly set status to lowercase 'active'
+          ...contactInfo,
+          user_id: user.id,
+          status: 'active'
         }])
 
-      if (error) throw error
+      if (insertError) {
+        console.error('Supabase insert error:', insertError)
+        throw new Error(`Failed to create listing: ${insertError.message}`)
+      }
+
       router.push('/listings')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating listing:', error)
-      alert('Failed to create listing. Please try again.')
+      alert(error.message || 'Failed to create listing. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
