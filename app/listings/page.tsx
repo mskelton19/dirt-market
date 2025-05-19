@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 
 type Listing = {
   id: string
@@ -98,7 +99,7 @@ export default function ListingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [activeTab, setActiveTab] = useState<'import' | 'export'>('import')
-  const [viewType, setViewType] = useState<'grid' | 'list'>('grid')
+  const [viewType, setViewType] = useState<'grid' | 'list'>('list')
   const [filters, setFilters] = useState<FilterOptions>({
     distance: 'all',
     materialTypes: [],
@@ -106,13 +107,24 @@ export default function ListingsPage() {
   })
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const { user } = useAuth()
+  const router = useRouter()
   const [expandedListings, setExpandedListings] = useState<string[]>([])
+
+  // Add authentication check
+  useEffect(() => {
+    if (!user) {
+      router.push('/auth/login')
+      return
+    }
+  }, [user, router])
 
   // Add useEffect for responsive view type
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 640) { // sm breakpoint
         setViewType('grid')
+      } else {
+        setViewType('list')
       }
     }
 
@@ -136,16 +148,14 @@ export default function ListingsPage() {
   async function fetchUserLocation() {
     try {
       if (!user) {
-        console.log('No authenticated user found')
-        return
+        return // Silently return if no user
       }
 
       // Get zip code from user metadata
       const zipCode = user.user_metadata?.zip_code
       
       if (!zipCode) {
-        console.log('No zip code found in user metadata')
-        return
+        return // Silently return if no zip code
       }
 
       // Convert zip code to coordinates using Mapbox
@@ -159,7 +169,10 @@ export default function ListingsPage() {
         setUserLocation({ lat, lng })
       }
     } catch (error) {
-      console.error('Error fetching user location:', error)
+      // Only log errors that aren't related to missing user
+      if (error instanceof Error && !error.message.includes('No authenticated user')) {
+        console.error('Error fetching user location:', error)
+      }
     }
   }
 
