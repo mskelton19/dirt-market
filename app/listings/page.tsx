@@ -22,8 +22,10 @@ type Listing = {
   listing_type: string
   latitude: number
   longitude: number
-  user_email?: string
-  user_phone?: string
+  contact_email?: string
+  contact_phone?: string
+  contact_first_name?: string
+  contact_company?: string
 }
 
 type FilterOptions = {
@@ -96,6 +98,7 @@ export default function ListingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [activeTab, setActiveTab] = useState<'import' | 'export'>('import')
+  const [viewType, setViewType] = useState<'grid' | 'list'>('grid')
   const [filters, setFilters] = useState<FilterOptions>({
     distance: 'all',
     materialTypes: [],
@@ -103,6 +106,25 @@ export default function ListingsPage() {
   })
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const { user } = useAuth()
+  const [expandedListings, setExpandedListings] = useState<string[]>([])
+
+  // Add useEffect for responsive view type
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640) { // sm breakpoint
+        setViewType('grid')
+      }
+    }
+
+    // Set initial view type
+    handleResize()
+
+    // Add event listener
+    window.addEventListener('resize', handleResize)
+
+    // Cleanup
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   useEffect(() => {
     fetchListings()
@@ -256,6 +278,14 @@ export default function ListingsPage() {
     })
   }
 
+  const handleToggleExpand = (id: string) => {
+    if (expandedListings.includes(id)) {
+      setExpandedListings(prev => prev.filter(i => i !== id))
+    } else {
+      setExpandedListings(prev => [...prev, id])
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -307,7 +337,7 @@ export default function ListingsPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 space-y-4 sm:space-y-0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Available Materials
+              Listings
             </h1>
             <p className="mt-2 text-sm text-gray-600">
               Browse through available construction materials
@@ -360,13 +390,39 @@ export default function ListingsPage() {
                   Export Listings
                 </button>
               </nav>
-              <div className="flex justify-center mt-4">
+              <div className="flex justify-center mt-4 space-x-4">
                 <button
                   onClick={() => setShowFilterPanel(true)}
                   className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   Sort & Filter
                 </button>
+                <div className="hidden sm:inline-flex rounded-md shadow-sm">
+                  <button
+                    onClick={() => setViewType('grid')}
+                    className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-l-md ${
+                      viewType === 'grid'
+                        ? 'bg-indigo-50 text-indigo-600 border-indigo-500'
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setViewType('list')}
+                    className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-r-md ${
+                      viewType === 'list'
+                        ? 'bg-indigo-50 text-indigo-600 border-indigo-500'
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -566,44 +622,70 @@ export default function ListingsPage() {
           </div>
         )}
 
-        {/* Listings Grid */}
+        {/* Listings Grid/List */}
         <div className="space-y-8">
           {/* Import Section */}
           <div id="import-listings" className={`${activeTab === 'import' ? 'block' : 'hidden sm:block'}`}>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Import Listings</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Import'))
-                .map((listing) => {
-                  const materialStyles = getMaterialTypeStyles(listing.material_type)
-                  const distance = userLocation && listing.latitude && listing.longitude
-                    ? calculateDistance(
-                        userLocation.lat,
-                        userLocation.lng,
-                        listing.latitude,
-                        listing.longitude
-                      )
-                    : null
+            {viewType === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Import'))
+                  .map((listing) => {
+                    const isExpanded = expandedListings.includes(listing.id);
+                    const materialStyles = getMaterialTypeStyles(listing.material_type)
+                    const distance = userLocation && listing.latitude && listing.longitude
+                      ? calculateDistance(
+                          userLocation.lat,
+                          userLocation.lng,
+                          listing.latitude,
+                          listing.longitude
+                        )
+                      : null
 
-                  return (
-                    <div
-                      key={listing.id}
-                      className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden border border-gray-100"
-                    >
-                      <div className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-xl font-semibold text-gray-900">
-                            {listing.site_name}
-                          </h2>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${materialStyles.bg} ${materialStyles.text} border ${materialStyles.border}`}>
-                            {formatMaterialType(listing.material_type)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-sm text-gray-500">
-                            {listing.quantity} {listing.unit}
-                          </span>
-                          {distance !== null && (
-                            <span className="text-sm text-gray-500 flex items-center">
+                    return (
+                      <div
+                        key={listing.id}
+                        className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden border border-gray-100"
+                      >
+                        <div className="p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-semibold text-gray-900">
+                              {listing.site_name}
+                            </h2>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${materialStyles.bg} ${materialStyles.text} border ${materialStyles.border}`}>
+                              {formatMaterialType(listing.material_type)}
+                            </span>
+                          </div>
+                          {listing.contact_company && (
+                            <p className="text-sm text-gray-600 mb-4">
+                              {listing.contact_company}
+                            </p>
+                          )}
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="text-base font-semibold text-gray-700">
+                              {listing.quantity} {listing.unit}
+                            </span>
+                            {distance !== null && (
+                              <span className="text-base font-semibold text-gray-700 flex items-center">
+                                <svg
+                                  className="h-4 w-4 mr-1"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                                {distance} miles away
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center text-sm text-gray-500 space-x-4 mb-4">
+                            <span className="flex items-center">
                               <svg
                                 className="h-4 w-4 mr-1"
                                 fill="none"
@@ -614,257 +696,539 @@ export default function ListingsPage() {
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   strokeWidth={2}
-                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                                 />
                               </svg>
-                              {distance} miles away
+                              {listing.location}
                             </span>
-                          )}
-                        </div>
-                        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                          {listing.description}
-                        </p>
-                        <div className="flex items-center text-sm text-gray-500 space-x-4">
-                          <span className="flex items-center">
-                            <svg
-                              className="h-4 w-4 mr-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                              />
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                              />
-                            </svg>
-                            {listing.location}
-                          </span>
-                        </div>
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="flex flex-col space-y-3">
-                            <div className="flex justify-between items-center">
-                              <Link
-                                href={`/listings/${listing.id}`}
-                                className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                              >
-                                View Details
-                                <svg
-                                  className="ml-1 h-4 w-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M9 5l7 7-7 7"
-                                  />
-                                </svg>
-                              </Link>
-                            </div>
-                            <div className="flex flex-col space-y-2">
-                              {listing.user_email && (
-                                <a
-                                  href={`mailto:${listing.user_email}`}
-                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                >
-                                  <svg
-                                    className="h-4 w-4 mr-2 text-gray-500"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
+                          </div>
+                          <div className="pt-4 border-t">
+                            <div className="flex flex-col space-y-3">
+                              <div className="flex flex-col space-y-2">
+                                {listing.contact_email && (
+                                  <a
+                                    href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
+
+I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
+
+Let me know if there's a good time to connect — happy to keep it quick.
+
+Thanks,
+${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
+                                    className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                                   >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                    />
-                                  </svg>
-                                  Email Company
-                                </a>
-                              )}
-                              {listing.user_phone && (
-                                <a
-                                  href={`tel:${listing.user_phone}`}
-                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                >
-                                  <svg
-                                    className="h-4 w-4 mr-2 text-gray-500"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
+                                    <svg
+                                      className="h-5 w-5 mr-2.5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                      />
+                                    </svg>
+                                    Email Company
+                                  </a>
+                                )}
+                                {listing.contact_phone && (
+                                  <a
+                                    href={`facetime-audio:${listing.contact_phone.replace(/\D/g, '')}`}
+                                    className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                                   >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                                    />
-                                  </svg>
-                                  Call Company
-                                </a>
-                              )}
+                                    <svg
+                                      className="h-5 w-5 mr-2.5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                      />
+                                    </svg>
+                                    Call Company
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                    )
+                  })}
+              </div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                {/* List Header */}
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 sm:px-6 hidden sm:block">
+                  <div className="grid grid-cols-12 gap-4 items-center">
+                    <div className="col-span-3 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Site Name</span>
                     </div>
-                  )
-                })}
-            </div>
+                    <div className="col-span-2 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Material</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Distance</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-3">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</span>
+                    </div>
+                    <div className="col-span-1 sm:col-span-1">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider"></span>
+                    </div>
+                  </div>
+                </div>
+                <ul className="divide-y divide-gray-200">
+                  {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Import'))
+                    .map((listing) => {
+                      const isExpanded = expandedListings.includes(listing.id);
+                      const materialStyles = getMaterialTypeStyles(listing.material_type)
+                      const distance = userLocation && listing.latitude && listing.longitude
+                        ? calculateDistance(
+                            userLocation.lat,
+                            userLocation.lng,
+                            listing.latitude,
+                            listing.longitude
+                          )
+                        : null
+
+                      return (
+                        <li key={listing.id}>
+                          <div className="px-4 py-4 sm:px-6">
+                            <div className="grid grid-cols-12 gap-4 items-center">
+                              {/* Site Name */}
+                              <div className="col-span-3 sm:col-span-2">
+                                <div>
+                                  <p className="text-sm font-medium text-indigo-600 truncate">
+                                    {listing.site_name}
+                                  </p>
+                                  {listing.contact_company && (
+                                    <p className="text-sm text-gray-500 truncate">
+                                      {listing.contact_company}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Material Type */}
+                              <div className="col-span-2 sm:col-span-2">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${materialStyles.bg} ${materialStyles.text} border ${materialStyles.border}`}>
+                                  {formatMaterialType(listing.material_type)}
+                                </span>
+                              </div>
+
+                              {/* Quantity */}
+                              <div className="col-span-2 sm:col-span-2">
+                                <p className="text-sm text-gray-500">
+                                  {listing.quantity} {listing.unit}
+                                </p>
+                              </div>
+
+                              {/* Distance */}
+                              <div className="col-span-2 sm:col-span-2">
+                                {distance !== null ? (
+                                  <p className="text-sm text-gray-500">
+                                    {distance} miles
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-gray-400">-</p>
+                                )}
+                              </div>
+
+                              {/* Contact Column */}
+                              <div className="col-span-2 sm:col-span-3">
+                                <div className="flex flex-col space-y-2">
+                                  <div className="flex flex-col space-y-2 sm:flex-row sm:space-x-2 sm:space-y-0">
+                                    {listing.contact_email && (
+                                      <a
+                                        href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
+
+I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
+
+Let me know if there's a good time to connect — happy to keep it quick.
+
+Thanks,
+${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
+                                        className="inline-flex items-center justify-center px-2.5 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                      >
+                                        <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        Email
+                                      </a>
+                                    )}
+                                    {listing.contact_phone && (
+                                      <a
+                                        href={`facetime-audio:${listing.contact_phone.replace(/\D/g, '')}`}
+                                        className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                      >
+                                        <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                        Call
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* More Details Column */}
+                              <div className="col-span-1 sm:col-span-1">
+                                <button
+                                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500 whitespace-nowrap"
+                                  onClick={() => handleToggleExpand(listing.id)}
+                                >
+                                  {isExpanded ? 'Less Details' : 'More Details'}
+                                </button>
+                              </div>
+                            </div>
+                            {/* Collapsible Contact Info */}
+                            {isExpanded && (
+                              <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* Location */}
+                                <div className="text-sm text-gray-500 flex items-center">
+                                  <svg
+                                    className="h-4 w-4 mr-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                    />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                  </svg>
+                                  {listing.location}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      )
+                    })}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Export Section */}
           <div id="export-listings" className={`${activeTab === 'export' ? 'block' : 'hidden sm:block'}`}>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Export Listings</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Export'))
-                .map((listing) => {
-                  const materialStyles = getMaterialTypeStyles(listing.material_type)
-                  const distance = userLocation && listing.latitude && listing.longitude
-                    ? calculateDistance(
-                        userLocation.lat,
-                        userLocation.lng,
-                        listing.latitude,
-                        listing.longitude
-                      )
-                    : null
+            {viewType === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Export'))
+                  .map((listing) => {
+                    const isExpanded = expandedListings.includes(listing.id);
+                    const materialStyles = getMaterialTypeStyles(listing.material_type)
+                    const distance = userLocation && listing.latitude && listing.longitude
+                      ? calculateDistance(
+                          userLocation.lat,
+                          userLocation.lng,
+                          listing.latitude,
+                          listing.longitude
+                        )
+                      : null
 
-                  return (
-                    <div
-                      key={listing.id}
-                      className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden border border-gray-100"
-                    >
-                      <div className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-xl font-semibold text-gray-900">
-                            {listing.site_name}
-                          </h2>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${materialStyles.bg} ${materialStyles.text} border ${materialStyles.border}`}>
-                            {formatMaterialType(listing.material_type)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-sm text-gray-500">
-                            {listing.quantity} {listing.unit}
-                          </span>
-                          {distance !== null && (
-                            <span className="text-sm text-gray-500">
-                              {distance} miles away
+                    return (
+                      <div
+                        key={listing.id}
+                        className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden border border-gray-100"
+                      >
+                        <div className="p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-semibold text-gray-900">
+                              {listing.site_name}
+                            </h2>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${materialStyles.bg} ${materialStyles.text} border ${materialStyles.border}`}>
+                              {formatMaterialType(listing.material_type)}
                             </span>
+                          </div>
+                          {listing.contact_company && (
+                            <p className="text-sm text-gray-600 mb-4">
+                              {listing.contact_company}
+                            </p>
                           )}
-                        </div>
-                        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                          {listing.description}
-                        </p>
-                        <div className="flex items-center text-sm text-gray-500 space-x-4">
-                          <span className="flex items-center">
-                            <svg
-                              className="h-4 w-4 mr-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                              />
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                              />
-                            </svg>
-                            {listing.location}
-                          </span>
-                        </div>
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="flex flex-col space-y-3">
-                            <div className="flex justify-between items-center">
-                              <Link
-                                href={`/listings/${listing.id}`}
-                                className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="text-base font-semibold text-gray-700">
+                              {listing.quantity} {listing.unit}
+                            </span>
+                            {distance !== null && (
+                              <span className="text-base font-semibold text-gray-700">
+                                {distance} miles away
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center text-sm text-gray-500 space-x-4">
+                            <span className="flex items-center">
+                              <svg
+                                className="h-4 w-4 mr-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
                               >
-                                View Details
-                                <svg
-                                  className="ml-1 h-4 w-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M9 5l7 7-7 7"
-                                  />
-                                </svg>
-                              </Link>
-                            </div>
-                            <div className="flex flex-col space-y-2">
-                              {listing.user_email && (
-                                <a
-                                  href={`mailto:${listing.user_email}`}
-                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                >
-                                  <svg
-                                    className="h-4 w-4 mr-2 text-gray-500"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                              </svg>
+                              {listing.location}
+                            </span>
+                          </div>
+                          <div className="pt-4 border-t">
+                            <div className="flex flex-col space-y-3">
+                              <div className="flex flex-col space-y-2">
+                                {listing.contact_email && (
+                                  <a
+                                    href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
+
+I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
+
+Let me know if there's a good time to connect — happy to keep it quick.
+
+Thanks,
+${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
+                                    className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                                   >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                    />
-                                  </svg>
-                                  Email Company
-                                </a>
-                              )}
-                              {listing.user_phone && (
-                                <a
-                                  href={`tel:${listing.user_phone}`}
-                                  className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                >
-                                  <svg
-                                    className="h-4 w-4 mr-2 text-gray-500"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
+                                    <svg
+                                      className="h-5 w-5 mr-2.5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                      />
+                                    </svg>
+                                    Email Company
+                                  </a>
+                                )}
+                                {listing.contact_phone && (
+                                  <a
+                                    href={`facetime-audio:${listing.contact_phone.replace(/\D/g, '')}`}
+                                    className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                                   >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                                    />
-                                  </svg>
-                                  Call Company
-                                </a>
-                              )}
+                                    <svg
+                                      className="h-5 w-5 mr-2.5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                      />
+                                    </svg>
+                                    Call Company
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                    )
+                  })}
+              </div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                {/* List Header */}
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 sm:px-6 hidden sm:block">
+                  <div className="grid grid-cols-12 gap-4 items-center">
+                    <div className="col-span-3 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Site Name</span>
                     </div>
-                  )
-                })}
-            </div>
+                    <div className="col-span-2 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Material</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Distance</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-3">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</span>
+                    </div>
+                    <div className="col-span-1 sm:col-span-1">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider"></span>
+                    </div>
+                  </div>
+                </div>
+                <ul className="divide-y divide-gray-200">
+                  {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Export'))
+                    .map((listing) => {
+                      const isExpanded = expandedListings.includes(listing.id);
+                      const materialStyles = getMaterialTypeStyles(listing.material_type)
+                      const distance = userLocation && listing.latitude && listing.longitude
+                        ? calculateDistance(
+                            userLocation.lat,
+                            userLocation.lng,
+                            listing.latitude,
+                            listing.longitude
+                          )
+                        : null
+
+                      return (
+                        <li key={listing.id}>
+                          <div className="px-4 py-4 sm:px-6">
+                            <div className="grid grid-cols-12 gap-4 items-center">
+                              {/* Site Name */}
+                              <div className="col-span-3 sm:col-span-2">
+                                <div>
+                                  <p className="text-sm font-medium text-indigo-600 truncate">
+                                    {listing.site_name}
+                                  </p>
+                                  {listing.contact_company && (
+                                    <p className="text-sm text-gray-500 truncate">
+                                      {listing.contact_company}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Material Type */}
+                              <div className="col-span-2 sm:col-span-2">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${materialStyles.bg} ${materialStyles.text} border ${materialStyles.border}`}>
+                                  {formatMaterialType(listing.material_type)}
+                                </span>
+                              </div>
+
+                              {/* Quantity */}
+                              <div className="col-span-2 sm:col-span-2">
+                                <p className="text-sm text-gray-500">
+                                  {listing.quantity} {listing.unit}
+                                </p>
+                              </div>
+
+                              {/* Distance */}
+                              <div className="col-span-2 sm:col-span-2">
+                                {distance !== null ? (
+                                  <p className="text-sm text-gray-500">
+                                    {distance} miles
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-gray-400">-</p>
+                                )}
+                              </div>
+
+                              {/* Contact Column */}
+                              <div className="col-span-2 sm:col-span-3">
+                                <div className="flex flex-col space-y-2">
+                                  <div className="flex flex-col space-y-2 sm:flex-row sm:space-x-2 sm:space-y-0">
+                                    {listing.contact_email && (
+                                      <a
+                                        href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
+
+I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
+
+Let me know if there's a good time to connect — happy to keep it quick.
+
+Thanks,
+${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
+                                        className="inline-flex items-center justify-center px-2.5 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                      >
+                                        <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        Email
+                                      </a>
+                                    )}
+                                    {listing.contact_phone && (
+                                      <a
+                                        href={`facetime-audio:${listing.contact_phone.replace(/\D/g, '')}`}
+                                        className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                      >
+                                        <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                        Call
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* More Details Column */}
+                              <div className="col-span-1 sm:col-span-1">
+                                <button
+                                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500 whitespace-nowrap"
+                                  onClick={() => handleToggleExpand(listing.id)}
+                                >
+                                  {isExpanded ? 'Less Details' : 'More Details'}
+                                </button>
+                              </div>
+                            </div>
+                            {/* Collapsible Contact Info */}
+                            {isExpanded && (
+                              <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* Location */}
+                                <div className="text-sm text-gray-500 flex items-center">
+                                  <svg
+                                    className="h-4 w-4 mr-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                    />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                  </svg>
+                                  {listing.location}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      )
+                    })}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
