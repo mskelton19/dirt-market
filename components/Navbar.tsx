@@ -12,8 +12,11 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
 
   const navigation = [
-    { name: 'Browse Materials', href: '/listings' },
-    ...(user ? [{ name: 'Post New Listing', href: '/listings/new' }] : []),
+    { name: 'Available Listings', href: '/listings' },
+    ...(user ? [
+      { name: 'Manage Listings', href: '/listings/manage' },
+      { name: 'Post New Listing', href: '/listings/new' }
+    ] : []),
   ]
 
   return (

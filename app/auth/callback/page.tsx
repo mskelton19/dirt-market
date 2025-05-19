@@ -32,7 +32,7 @@ export default function AuthCallbackPage() {
       } catch (error) {
         console.error('Error verifying email:', error)
         // If there's an error, redirect to sign in
-        router.push('/auth/signin')
+        router.push('/auth/login')
       }
     }
 

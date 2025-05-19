@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error
       
       // After successful sign-out, redirect to the sign-in page
-      router.push('/auth/signin')
+      router.push('/auth/login')
       router.refresh() // Refresh to ensure all server components are updated
     } catch (error) {
       console.error('Error signing out:', error)
