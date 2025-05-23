@@ -9,6 +9,7 @@ import { Fragment } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import ErrorMessage from '@/components/ErrorMessage'
+import CompanyMaterialChart from '@/components/CompanyMaterialChart'
 
 type Listing = {
   id: string
@@ -98,6 +99,7 @@ export default function ManageListingsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'active' | 'completed'>('active')
   const [modalError, setModalError] = useState<string | null>(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -278,6 +280,7 @@ export default function ManageListingsPage() {
             company_id: selectedCompany,
             quantity_moved: quantityMoved,
             unit: listing.unit,
+            material_type: listing.material_type,
             created_by: user?.id,
             completed_at: completedAt
           })
@@ -288,6 +291,9 @@ export default function ManageListingsPage() {
           return
         }
 
+        // Update local state and trigger refresh
+        await fetchUserListings()
+        setRefreshTrigger(prev => prev + 1)
         setListings(listings.map(listing => 
           listing.id === id ? { 
             ...listing, 
@@ -339,6 +345,7 @@ export default function ManageListingsPage() {
             company_id: selectedCompany,
             quantity_moved: quantityMoved,
             unit: listing.unit,
+            material_type: listing.material_type,
             created_by: user?.id,
             completed_at: completedAt
           })
@@ -349,7 +356,9 @@ export default function ManageListingsPage() {
           return
         }
 
-        // Update local state
+        // Update local state and trigger refresh
+        await fetchUserListings()
+        setRefreshTrigger(prev => prev + 1)
         setListings([
           ...listings.map(listing => 
             listing.id === id ? { 
@@ -654,6 +663,14 @@ export default function ManageListingsPage() {
             </div>
           )}
         </div>
+
+        {/* Analytics Section */}
+        {/* 
+        <div className="mt-8">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Material Movement Analytics</h2>
+          <MaterialMovementCharts refreshTrigger={refreshTrigger} />
+        </div>
+        */}
       </div>
 
       {/* Edit Modal */}
