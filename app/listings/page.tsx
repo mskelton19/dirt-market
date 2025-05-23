@@ -106,17 +106,24 @@ export default function ListingsPage() {
     quantity: 'all'
   })
   const [showFilterPanel, setShowFilterPanel] = useState(false)
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const [expandedListings, setExpandedListings] = useState<string[]>([])
+  const [distanceFilter, setDistanceFilter] = useState(50)
 
   // Add authentication check
   useEffect(() => {
-    if (!user) {
+    if (!authLoading && !user) {
       router.push('/auth/login')
       return
     }
-  }, [user, router])
+    if (!authLoading) {
+      fetchListings()
+      if (user) {
+        fetchUserLocation()
+      }
+    }
+  }, [user, authLoading, router])
 
   // Add useEffect for responsive view type
   useEffect(() => {
@@ -137,13 +144,6 @@ export default function ListingsPage() {
     // Cleanup
     return () => window.removeEventListener('resize', handleResize)
   }, [])
-
-  useEffect(() => {
-    fetchListings()
-    if (user) {
-      fetchUserLocation()
-    }
-  }, [user])
 
   async function fetchUserLocation() {
     try {
@@ -216,34 +216,6 @@ export default function ListingsPage() {
           return false
         }
 
-        // Filter by distance
-        if (filters.distance !== 'all' && userLocation) {
-          const distance = calculateDistance(
-            userLocation.lat,
-            userLocation.lng,
-            listing.latitude,
-            listing.longitude
-          )
-          
-          switch (filters.distance) {
-            case 'distance_5':
-              if (distance >= 5) return false
-              break
-            case 'distance_10':
-              if (distance >= 10) return false
-              break
-            case 'distance_25':
-              if (distance >= 25) return false
-              break
-            case 'distance_50':
-              if (distance >= 50) return false
-              break
-            case 'distance_50plus':
-              if (distance < 50) return false
-              break
-          }
-        }
-
         return true
       })
       .sort((a, b) => {
@@ -299,6 +271,30 @@ export default function ListingsPage() {
     }
   }
 
+  // Filter listings by distance
+  const filteredListings = listings.filter(listing => {
+    // If no user location, show all listings
+    if (!userLocation) return true;
+    
+    // Skip listings without coordinates
+    if (!listing.latitude || !listing.longitude) return false;
+
+    const distance = calculateDistance(
+      userLocation.lat,
+      userLocation.lng,
+      listing.latitude,
+      listing.longitude
+    );
+
+    // If user is a subscriber, apply distance filter
+    if (user?.user_metadata?.is_subscriber) {
+      return distance <= distanceFilter;
+    }
+
+    // For non-subscribers, show all listings
+    return true;
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -324,13 +320,19 @@ export default function ListingsPage() {
     )
   }
 
-  if (listings.length === 0) {
+  if (filteredListings.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">No Listings Available</h2>
-            <p className="text-gray-600 mb-8">Be the first to post a listing!</p>
+            <p className="text-gray-600 mb-8">
+              {userLocation 
+                ? user?.user_metadata?.is_subscriber
+                  ? "No listings found within 100 miles of your location."
+                  : "No listings found in your area."
+                : "Set your zip code in your profile to see listings near you."}
+            </p>
             <Link
               href="/listings/new"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
@@ -635,6 +637,32 @@ export default function ListingsPage() {
           </div>
         )}
 
+        {/* Keep the distance filter for subscribers */}
+        {user?.user_metadata?.is_subscriber && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center space-x-4">
+              <label htmlFor="distance" className="text-sm font-medium text-gray-700">
+                Distance:
+              </label>
+              <select
+                id="distance"
+                value={distanceFilter}
+                onChange={(e) => setDistanceFilter(Number(e.target.value))}
+                className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value={25}>25 miles</option>
+                <option value={50}>50 miles</option>
+                <option value={100}>100 miles</option>
+              </select>
+              {!userLocation && (
+                <p className="text-sm text-gray-500">
+                  Set your zip code in your profile to filter by distance
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Listings Grid/List */}
         <div className="space-y-8">
           {/* Import Section */}
@@ -642,7 +670,7 @@ export default function ListingsPage() {
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Import Listings</h2>
             {viewType === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Import'))
+                {filterAndSortListings(filteredListings.filter(listing => listing.listing_type === 'Import'))
                   .map((listing) => {
                     const isExpanded = expandedListings.includes(listing.id);
                     const materialStyles = getMaterialTypeStyles(listing.material_type)
@@ -807,7 +835,7 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
                   </div>
                 </div>
                 <ul className="divide-y divide-gray-200">
-                  {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Import'))
+                  {filterAndSortListings(filteredListings.filter(listing => listing.listing_type === 'Import'))
                     .map((listing) => {
                       const isExpanded = expandedListings.includes(listing.id);
                       const materialStyles = getMaterialTypeStyles(listing.material_type)
@@ -952,7 +980,7 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Export Listings</h2>
             {viewType === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Export'))
+                {filterAndSortListings(filteredListings.filter(listing => listing.listing_type === 'Export'))
                   .map((listing) => {
                     const isExpanded = expandedListings.includes(listing.id);
                     const materialStyles = getMaterialTypeStyles(listing.material_type)
@@ -1104,7 +1132,7 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
                   </div>
                 </div>
                 <ul className="divide-y divide-gray-200">
-                  {filterAndSortListings(listings.filter(listing => listing.listing_type === 'Export'))
+                  {filterAndSortListings(filteredListings.filter(listing => listing.listing_type === 'Export'))
                     .map((listing) => {
                       const isExpanded = expandedListings.includes(listing.id);
                       const materialStyles = getMaterialTypeStyles(listing.material_type)

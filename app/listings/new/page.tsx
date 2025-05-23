@@ -45,7 +45,7 @@ interface UserProfile {
 export default function NewListingPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [mapboxError, setMapboxError] = useState<string | null>(null)
   const [location, setLocation] = useState({ lat: 39.8283, lng: -98.5795, placeName: '' }) // Default to center of US
@@ -245,8 +245,15 @@ export default function NewListingPage() {
   }
 
   useEffect(() => {
-    loadUserLocation()
-  }, [user, supabase, setValue])
+    // Check if user is loaded before loading location
+    if (!loading && !user) {
+        router.push('/auth/login');
+        return;
+    }
+    if (user) {
+        loadUserLocation();
+    }
+  }, [user, loading, router, supabase, setValue]) // Added loading and router to dependencies
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -294,7 +301,7 @@ export default function NewListingPage() {
         throw new Error(`Failed to create listing: ${insertError.message}`)
       }
 
-      router.push('/listings')
+      router.push('/listings/manage')
     } catch (error: any) {
       console.error('Error creating listing:', error)
       alert(error.message || 'Failed to create listing. Please try again.')

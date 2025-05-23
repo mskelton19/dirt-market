@@ -8,6 +8,7 @@ import { Dialog, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import ErrorMessage from '@/components/ErrorMessage'
 
 type Listing = {
   id: string
@@ -32,6 +33,13 @@ type Listing = {
   contact_company?: string
   status: 'active' | 'pending' | 'completed'
   parent_listing_id?: string
+  completed_at?: string
+  completed_with_company?: string
+  completed_listings?: {
+    completed_at: string;
+    company_id: string;
+    companies: { name: string } | null;
+  }[];
 }
 
 type Company = {
@@ -89,28 +97,39 @@ export default function ManageListingsPage() {
   const [quantityMoved, setQuantityMoved] = useState<number>(0)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'active' | 'completed'>('active')
-  const { user } = useAuth()
+  const [modalError, setModalError] = useState<string | null>(null)
+  const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const supabase = createClientComponentClient()
 
   useEffect(() => {
-    if (!user) {
+    if (!authLoading && !user) {
       router.push('/auth/login')
       return
     }
-    fetchUserListings()
-    fetchCompanies()
-  }, [user])
+
+    if (user) {
+      fetchUserListings()
+      fetchCompanies()
+    }
+  }, [user, authLoading, router])
 
   async function fetchUserListings() {
     try {
+      setLoading(true)
       const { data, error } = await supabase
         .from('listings')
-        .select('*')
+        .select(
+          `*,
+          completed_listings (*,
+          companies (name))
+          `
+        )
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
+
       setListings(data || [])
     } catch (error: any) {
       console.error('Error fetching listings:', error)
@@ -209,20 +228,31 @@ export default function ManageListingsPage() {
 
   async function handleMarkAsDone(id: string) {
     if (!selectedCompany) {
-      alert('Please select a company')
+      setModalError('Please select a company')
       return
     }
 
-    if (quantityMoved <= 0) {
-      alert('Please enter a valid quantity')
+    if (!quantityMoved || quantityMoved <= 0) {
+      setModalError('Please enter a valid quantity greater than zero')
       return
     }
 
     try {
+      setModalError(null)
       const listing = listings.find(l => l.id === id)
-      if (!listing) throw new Error('Listing not found')
+      if (!listing) {
+        setModalError('Listing not found. Please try refreshing the page.')
+        return
+      }
 
       const percentageMoved = (quantityMoved / listing.quantity) * 100
+      const completedAt = new Date().toISOString()
+      const selectedCompanyName = companies.find(c => c.id === selectedCompany)?.name
+
+      if (!selectedCompanyName) {
+        setModalError('Selected company not found. Please try again.')
+        return
+      }
 
       // If 100% moved, just mark as completed
       if (percentageMoved >= 100) {
@@ -230,11 +260,15 @@ export default function ManageListingsPage() {
           .from('listings')
           .update({ 
             status: 'completed',
-            quantity: quantityMoved // Update quantity to match what was moved
+            quantity: quantityMoved
           })
           .eq('id', id)
 
-        if (updateError) throw updateError
+        if (updateError) {
+          console.error('Error updating listing:', updateError)
+          setModalError('Failed to update listing. Please try again.')
+          return
+        }
 
         // Record the completion
         const { error: completionError } = await supabase
@@ -244,13 +278,22 @@ export default function ManageListingsPage() {
             company_id: selectedCompany,
             quantity_moved: quantityMoved,
             unit: listing.unit,
-            created_by: user?.id
+            created_by: user?.id,
+            completed_at: completedAt
           })
 
-        if (completionError) throw completionError
+        if (completionError) {
+          console.error('Error recording completion:', completionError)
+          setModalError('Failed to record completion. Please try again.')
+          return
+        }
 
         setListings(listings.map(listing => 
-          listing.id === id ? { ...listing, status: 'completed', quantity: quantityMoved } : listing
+          listing.id === id ? { 
+            ...listing, 
+            status: 'completed', 
+            quantity: quantityMoved
+          } : listing
         ))
       } else {
         // Create new listing for remaining quantity
@@ -260,25 +303,33 @@ export default function ManageListingsPage() {
           .from('listings')
           .insert({
             ...listing,
-            id: undefined, // Let Supabase generate new ID
+            id: undefined,
             quantity: remainingQuantity,
             parent_listing_id: id
           })
           .select()
           .single()
 
-        if (newListingError) throw newListingError
+        if (newListingError) {
+          console.error('Error creating new listing:', newListingError)
+          setModalError('Failed to create new listing for remaining quantity. Please try again.')
+          return
+        }
 
         // Mark original listing as completed and update its quantity
         const { error: updateError } = await supabase
           .from('listings')
           .update({ 
             status: 'completed',
-            quantity: quantityMoved // Update quantity to match what was moved
+            quantity: quantityMoved
           })
           .eq('id', id)
 
-        if (updateError) throw updateError
+        if (updateError) {
+          console.error('Error updating original listing:', updateError)
+          setModalError('Failed to update original listing. Please try again.')
+          return
+        }
 
         // Record the completion
         const { error: completionError } = await supabase
@@ -288,15 +339,24 @@ export default function ManageListingsPage() {
             company_id: selectedCompany,
             quantity_moved: quantityMoved,
             unit: listing.unit,
-            created_by: user?.id
+            created_by: user?.id,
+            completed_at: completedAt
           })
 
-        if (completionError) throw completionError
+        if (completionError) {
+          console.error('Error recording completion:', completionError)
+          setModalError('Failed to record completion. Please try again.')
+          return
+        }
 
         // Update local state
         setListings([
           ...listings.map(listing => 
-            listing.id === id ? { ...listing, status: 'completed', quantity: quantityMoved } : listing
+            listing.id === id ? { 
+              ...listing, 
+              status: 'completed', 
+              quantity: quantityMoved
+            } : listing
           ),
           newListing
         ])
@@ -313,7 +373,7 @@ export default function ManageListingsPage() {
       }, 3000)
     } catch (error: any) {
       console.error('Error marking listing as done:', error)
-      alert('Failed to update listing status. Please try again.')
+      setModalError(error.message || 'An unexpected error occurred. Please try again.')
     }
   }
 
@@ -365,6 +425,14 @@ export default function ManageListingsPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Error Message */}
+        {error && (
+          <ErrorMessage 
+            message={error} 
+            onDismiss={() => setError(null)} 
+          />
+        )}
+
         {/* Success Message */}
         {successMessage && (
           <div className="mb-4 rounded-md bg-green-50 p-4">
@@ -481,85 +549,106 @@ export default function ManageListingsPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Listing
+                      Site Name
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Material Type
+                      Material
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
+                      Quantity
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
+                      {statusFilter === 'completed' ? 'Completed Date' : 'Created Date'}
                     </th>
+                    {statusFilter === 'completed' && (
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Completed With
+                      </th>
+                    )}
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredListings.map((listing) => (
-                    <tr key={listing.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {listing.site_name}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {listing.quantity} {listing.unit}
-                            </div>
+                  {filteredListings.map((listing) => {
+                    const materialStyles = getMaterialTypeStyles(listing.material_type);
+                    return (
+                      <tr key={listing.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{listing.site_name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${materialStyles.bg} ${materialStyles.text} border ${materialStyles.border}`}>
+                            {formatMaterialType(listing.material_type)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {listing.quantity} {listing.unit}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            listing.status === 'active' 
+                              ? 'bg-green-100 text-green-800 border border-green-200'
+                              : 'bg-gray-100 text-gray-800 border border-gray-200'
+                          }`}>
+                            {listing.status === 'active' ? 'Active' : 'Completed'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {listing.status === 'completed' 
+                            ? (listing.completed_listings?.[0]?.completed_at ? new Date(listing.completed_listings[0].completed_at).toLocaleDateString() : '-')
+                            : new Date(listing.created_at).toLocaleDateString()}
+                        </td>
+                        {statusFilter === 'completed' && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {listing.completed_listings?.[0]?.companies?.name || '-'}
+                          </td>
+                        )}
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-start space-x-2">
+                            {listing.status === 'active' ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setSelectedListing(listing)
+                                    setIsEditModalOpen(true)
+                                  }}
+                                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedListing(listing)
+                                    setIsCompleteModalOpen(true)
+                                    setQuantityMoved(listing.quantity)
+                                    fetchCompanies()
+                                  }}
+                                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                >
+                                  Mark as Done
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedListing(listing)
+                                  setIsEditModalOpen(true)
+                                }}
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                              >
+                                View Details
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getMaterialTypeStyles(listing.material_type).bg} ${getMaterialTypeStyles(listing.material_type).text}`}>
-                          {formatMaterialType(listing.material_type)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">
-                          {listing.listing_type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">
-                          {listing.status.charAt(0).toUpperCase() + listing.status.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(listing.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => {
-                              setSelectedListing(listing)
-                              setIsEditModalOpen(true)
-                            }}
-                            className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                          >
-                            Edit
-                          </button>
-                          {listing.status !== 'completed' && (
-                            <button
-                              onClick={() => {
-                                setSelectedListing(listing)
-                                setIsCompleteModalOpen(true)
-                                fetchCompanies()
-                              }}
-                              className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                            >
-                              Mark as Done
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -769,8 +858,21 @@ export default function ManageListingsPage() {
                                 type="number"
                                 name="quantity"
                                 id="quantity"
-                                value={quantityMoved}
-                                onChange={(e) => setQuantityMoved(Number(e.target.value))}
+                                value={quantityMoved || ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  // Allow empty string or valid numbers
+                                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                    const numValue = value === '' ? 0 : Number(value);
+                                    // Don't allow more than the total quantity
+                                    if (selectedListing && numValue > selectedListing.quantity) {
+                                      setQuantityMoved(selectedListing.quantity);
+                                    } else {
+                                      setQuantityMoved(numValue);
+                                    }
+                                  }
+                                }}
+                                max={selectedListing?.quantity}
                                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
                               />
                               <span className="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-gray-50 px-3 text-gray-500 sm:text-sm">
@@ -789,6 +891,12 @@ export default function ManageListingsPage() {
                         </div>
                       </div>
                     </div>
+                  )}
+                  {modalError && (
+                    <ErrorMessage 
+                      message={modalError} 
+                      onDismiss={() => setModalError(null)} 
+                    />
                   )}
                   <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
                     <button
