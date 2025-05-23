@@ -1,10 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import { Dialog, Transition } from '@headlessui/react'
+import { Fragment } from 'react'
+import { XMarkIcon } from '@heroicons/react/24/outline'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 type Listing = {
   id: string
@@ -27,7 +30,13 @@ type Listing = {
   contact_phone?: string
   contact_first_name?: string
   contact_company?: string
-  status: 'active' | 'pending' | 'sold'
+  status: 'active' | 'pending' | 'completed'
+  parent_listing_id?: string
+}
+
+type Company = {
+  id: string
+  name: string
 }
 
 // Add material type color mapping
@@ -72,8 +81,17 @@ export default function ManageListingsPage() {
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false)
+  const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<string>('')
+  const [quantityMoved, setQuantityMoved] = useState<number>(0)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'active' | 'completed'>('active')
   const { user } = useAuth()
   const router = useRouter()
+  const supabase = createClientComponentClient()
 
   useEffect(() => {
     if (!user) {
@@ -81,6 +99,7 @@ export default function ManageListingsPage() {
       return
     }
     fetchUserListings()
+    fetchCompanies()
   }, [user])
 
   async function fetchUserListings() {
@@ -101,39 +120,222 @@ export default function ManageListingsPage() {
     }
   }
 
+  async function fetchCompanies() {
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('*')
+        .order('name')
+
+      if (error) throw error
+      setCompanies(data || [])
+    } catch (error: any) {
+      console.error('Error fetching companies:', error)
+      alert('Failed to load companies. Please try again.')
+    }
+  }
+
   async function handleDeleteListing(id: string) {
     if (!confirm('Are you sure you want to delete this listing?')) return
 
     try {
-      const { error } = await supabase
+      // First, get the listing data
+      const { data: listing, error: fetchError } = await supabase
+        .from('listings')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      // Ensure user is available before inserting
+      if (!user || !user.id) {
+        console.error('Authenticated user not found when attempting deletion.');
+        alert('Authentication error. Please try logging in again.');
+        return;
+      }
+
+      // Get session to check auth state before inserting
+      console.log('Fetching session before insert...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Error getting session before insert:', sessionError);
+        alert('Could not verify authentication. Please try logging in again.');
+        return;
+      }
+
+      console.log('User from useAuth:', user);
+      console.log('Session from supabase.auth.getSession():', session);
+
+      if (!session || !session.user || !session.user.id) {
+          console.error('No active session found before insert.');
+          alert('No active authentication session. Please try logging in again.');
+          return;
+      }
+
+      // Insert into deleted_listings table
+      const { error: insertError } = await supabase
+        .from('deleted_listings')
+        .insert({
+          ...listing,
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id // Use user.id directly
+        })
+
+      if (insertError) throw insertError
+
+      // Delete from listings table
+      const { error: deleteError } = await supabase
         .from('listings')
         .delete()
         .eq('id', id)
 
-      if (error) throw error
+      if (deleteError) throw deleteError
+
       setListings(listings.filter(listing => listing.id !== id))
+      setIsEditModalOpen(false)
+      setSuccessMessage('Listing deleted successfully')
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null)
+      }, 3000)
     } catch (error: any) {
       console.error('Error deleting listing:', error)
       alert('Failed to delete listing. Please try again.')
     }
   }
 
-  async function handleUpdateStatus(id: string, newStatus: 'active' | 'pending' | 'sold') {
-    try {
-      const { error } = await supabase
-        .from('listings')
-        .update({ status: newStatus })
-        .eq('id', id)
+  async function handleMarkAsDone(id: string) {
+    if (!selectedCompany) {
+      alert('Please select a company')
+      return
+    }
 
-      if (error) throw error
-      setListings(listings.map(listing => 
-        listing.id === id ? { ...listing, status: newStatus } : listing
-      ))
+    if (quantityMoved <= 0) {
+      alert('Please enter a valid quantity')
+      return
+    }
+
+    try {
+      const listing = listings.find(l => l.id === id)
+      if (!listing) throw new Error('Listing not found')
+
+      const percentageMoved = (quantityMoved / listing.quantity) * 100
+
+      // If 100% moved, just mark as completed
+      if (percentageMoved >= 100) {
+        const { error: updateError } = await supabase
+          .from('listings')
+          .update({ 
+            status: 'completed',
+            quantity: quantityMoved // Update quantity to match what was moved
+          })
+          .eq('id', id)
+
+        if (updateError) throw updateError
+
+        // Record the completion
+        const { error: completionError } = await supabase
+          .from('completed_listings')
+          .insert({
+            listing_id: id,
+            company_id: selectedCompany,
+            quantity_moved: quantityMoved,
+            unit: listing.unit,
+            created_by: user?.id
+          })
+
+        if (completionError) throw completionError
+
+        setListings(listings.map(listing => 
+          listing.id === id ? { ...listing, status: 'completed', quantity: quantityMoved } : listing
+        ))
+      } else {
+        // Create new listing for remaining quantity
+        const remainingQuantity = listing.quantity - quantityMoved
+        
+        const { data: newListing, error: newListingError } = await supabase
+          .from('listings')
+          .insert({
+            ...listing,
+            id: undefined, // Let Supabase generate new ID
+            quantity: remainingQuantity,
+            parent_listing_id: id
+          })
+          .select()
+          .single()
+
+        if (newListingError) throw newListingError
+
+        // Mark original listing as completed and update its quantity
+        const { error: updateError } = await supabase
+          .from('listings')
+          .update({ 
+            status: 'completed',
+            quantity: quantityMoved // Update quantity to match what was moved
+          })
+          .eq('id', id)
+
+        if (updateError) throw updateError
+
+        // Record the completion
+        const { error: completionError } = await supabase
+          .from('completed_listings')
+          .insert({
+            listing_id: id,
+            company_id: selectedCompany,
+            quantity_moved: quantityMoved,
+            unit: listing.unit,
+            created_by: user?.id
+          })
+
+        if (completionError) throw completionError
+
+        // Update local state
+        setListings([
+          ...listings.map(listing => 
+            listing.id === id ? { ...listing, status: 'completed', quantity: quantityMoved } : listing
+          ),
+          newListing
+        ])
+      }
+
+      setIsCompleteModalOpen(false)
+      setSelectedCompany('')
+      setQuantityMoved(0)
+      setSuccessMessage('Listing updated successfully')
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null)
+      }, 3000)
     } catch (error: any) {
-      console.error('Error updating listing status:', error)
+      console.error('Error marking listing as done:', error)
       alert('Failed to update listing status. Please try again.')
     }
   }
+
+  async function handleUpdateListing(updatedListing: Listing) {
+    try {
+      const { error } = await supabase
+        .from('listings')
+        .update(updatedListing)
+        .eq('id', updatedListing.id)
+
+      if (error) throw error
+      setListings(listings.map(listing => 
+        listing.id === updatedListing.id ? updatedListing : listing
+      ))
+      setIsEditModalOpen(false)
+    } catch (error: any) {
+      console.error('Error updating listing:', error)
+      alert('Failed to update listing. Please try again.')
+    }
+  }
+
+  const filteredListings = listings.filter(listing => listing.status === statusFilter)
 
   if (loading) {
     return (
@@ -163,6 +365,22 @@ export default function ManageListingsPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Success Message */}
+        {successMessage && (
+          <div className="mb-4 rounded-md bg-green-50 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-green-800">{successMessage}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 space-y-4 sm:space-y-0">
           <div>
@@ -190,26 +408,72 @@ export default function ManageListingsPage() {
                 clipRule="evenodd"
               />
             </svg>
-            Create New Listing
+            Create Listing
           </Link>
+        </div>
+
+        {/* Status Filter */}
+        <div className="mb-6">
+          <div className="sm:hidden">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'active' | 'completed')}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="active">Active Listings</option>
+              <option value="completed">Completed Listings</option>
+            </select>
+          </div>
+          <div className="hidden sm:block">
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                <button
+                  onClick={() => setStatusFilter('active')}
+                  className={`${
+                    statusFilter === 'active'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
+                >
+                  Active Listings
+                </button>
+                <button
+                  onClick={() => setStatusFilter('completed')}
+                  className={`${
+                    statusFilter === 'completed'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  } whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
+                >
+                  Completed Listings
+                </button>
+              </nav>
+            </div>
+          </div>
         </div>
 
         {/* Listings Table */}
         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
             <h3 className="text-lg leading-6 font-medium text-gray-900">
-              Your Listings
+              Your {statusFilter === 'active' ? 'Active' : 'Completed'} Listings
             </h3>
           </div>
-          {listings.length === 0 ? (
+          {filteredListings.length === 0 ? (
             <div className="px-4 py-5 sm:p-6 text-center">
-              <p className="text-gray-500 mb-4">You haven't created any listings yet.</p>
-              <Link
-                href="/listings/new"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Create Your First Listing
-              </Link>
+              <p className="text-gray-500 mb-4">
+                {statusFilter === 'active'
+                  ? "You don't have any active listings."
+                  : "You don't have any completed listings."}
+              </p>
+              {statusFilter === 'active' && (
+                <Link
+                  href="/listings/new"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Create New Listing
+                </Link>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -237,7 +501,7 @@ export default function ManageListingsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {listings.map((listing) => (
+                  {filteredListings.map((listing) => (
                     <tr key={listing.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -252,53 +516,47 @@ export default function ManageListingsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          listing.material_type ? 
-                            `${getMaterialTypeStyles(listing.material_type).bg} ${getMaterialTypeStyles(listing.material_type).text}`
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {listing.material_type ? 
-                            formatMaterialType(listing.material_type)
-                            : 'Unknown Material'
-                          }
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getMaterialTypeStyles(listing.material_type).bg} ${getMaterialTypeStyles(listing.material_type).text}`}>
+                          {formatMaterialType(listing.material_type)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          listing.listing_type === 'Import' 
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
+                        <span className="text-sm text-gray-900">
                           {listing.listing_type}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={listing.status}
-                          onChange={(e) => handleUpdateStatus(listing.id, e.target.value as 'active' | 'pending' | 'sold')}
-                          className="text-sm text-gray-900 border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                          <option value="active">Active</option>
-                          <option value="pending">Pending</option>
-                          <option value="sold">Sold</option>
-                        </select>
+                        <span className="text-sm text-gray-900">
+                          {listing.status.charAt(0).toUpperCase() + listing.status.slice(1)}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(listing.created_at).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <Link
-                          href={`/listings/${listing.id}/edit`}
-                          className="text-indigo-600 hover:text-indigo-900"
-                        >
-                          Edit
-                        </Link>
-                        <button
-                          onClick={() => handleDeleteListing(listing.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedListing(listing)
+                              setIsEditModalOpen(true)
+                            }}
+                            className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                          >
+                            Edit
+                          </button>
+                          {listing.status !== 'completed' && (
+                            <button
+                              onClick={() => {
+                                setSelectedListing(listing)
+                                setIsCompleteModalOpen(true)
+                                fetchCompanies()
+                              }}
+                              className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                            >
+                              Mark as Done
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -308,6 +566,252 @@ export default function ManageListingsPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <Transition.Root show={isEditModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={setIsEditModalOpen}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 z-10 overflow-y-auto">
+            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div className="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
+                    <button
+                      type="button"
+                      className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                      onClick={() => setIsEditModalOpen(false)}
+                    >
+                      <span className="sr-only">Close</span>
+                      <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                    </button>
+                  </div>
+                  {selectedListing && (
+                    <div className="sm:flex sm:items-start">
+                      <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
+                        <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                          Edit Listing
+                        </Dialog.Title>
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <label htmlFor="site_name" className="block text-sm font-medium text-gray-700">
+                              Site Name
+                            </label>
+                            <input
+                              type="text"
+                              name="site_name"
+                              id="site_name"
+                              value={selectedListing.site_name}
+                              onChange={(e) => setSelectedListing({ ...selectedListing, site_name: e.target.value })}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="quantity" className="block text-sm font-medium text-gray-700">
+                              Quantity
+                            </label>
+                            <input
+                              type="number"
+                              name="quantity"
+                              id="quantity"
+                              value={selectedListing.quantity}
+                              onChange={(e) => setSelectedListing({ ...selectedListing, quantity: Number(e.target.value) })}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="unit" className="block text-sm font-medium text-gray-700">
+                              Unit
+                            </label>
+                            <input
+                              type="text"
+                              name="unit"
+                              id="unit"
+                              value={selectedListing.unit}
+                              onChange={(e) => setSelectedListing({ ...selectedListing, unit: e.target.value })}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="location" className="block text-sm font-medium text-gray-700">
+                              Location
+                            </label>
+                            <input
+                              type="text"
+                              name="location"
+                              id="location"
+                              value={selectedListing.location}
+                              onChange={(e) => setSelectedListing({ ...selectedListing, location: e.target.value })}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse sm:ml-4">
+                    <button
+                      type="button"
+                      className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:ml-3 sm:w-auto"
+                      onClick={() => selectedListing && handleUpdateListing(selectedListing)}
+                    >
+                      Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                      onClick={() => setIsEditModalOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:mt-0 sm:w-auto sm:mr-auto"
+                      onClick={() => selectedListing && handleDeleteListing(selectedListing.id)}
+                    >
+                      Delete Listing
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
+
+      {/* Complete Modal */}
+      <Transition.Root show={isCompleteModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={setIsCompleteModalOpen}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 z-10 overflow-y-auto">
+            <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div className="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
+                    <button
+                      type="button"
+                      className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                      onClick={() => setIsCompleteModalOpen(false)}
+                    >
+                      <span className="sr-only">Close</span>
+                      <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                    </button>
+                  </div>
+                  {selectedListing && (
+                    <div className="sm:flex sm:items-start">
+                      <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
+                        <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                          Complete Listing
+                        </Dialog.Title>
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <label htmlFor="company" className="block text-sm font-medium text-gray-700">
+                              Company
+                            </label>
+                            <select
+                              id="company"
+                              name="company"
+                              value={selectedCompany}
+                              onChange={(e) => setSelectedCompany(e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                            >
+                              <option value="">Select a company</option>
+                              {companies.map((company) => (
+                                <option key={company.id} value={company.id}>
+                                  {company.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="quantity" className="block text-sm font-medium text-gray-700">
+                              Quantity Moved
+                            </label>
+                            <div className="mt-1 flex rounded-md shadow-sm">
+                              <input
+                                type="number"
+                                name="quantity"
+                                id="quantity"
+                                value={quantityMoved}
+                                onChange={(e) => setQuantityMoved(Number(e.target.value))}
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900"
+                              />
+                              <span className="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-gray-50 px-3 text-gray-500 sm:text-sm">
+                                {selectedListing.unit}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm text-gray-500">
+                              {selectedListing.quantity} {selectedListing.unit} total available
+                            </p>
+                            {quantityMoved > 0 && (
+                              <p className="mt-1 text-sm text-gray-500">
+                                {((quantityMoved / selectedListing.quantity) * 100).toFixed(1)}% of total quantity
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <button
+                      type="button"
+                      className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:ml-3 sm:w-auto"
+                      onClick={() => selectedListing && handleMarkAsDone(selectedListing.id)}
+                    >
+                      Complete
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                      onClick={() => setIsCompleteModalOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
     </div>
   )
 } 

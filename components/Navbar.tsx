@@ -15,7 +15,7 @@ export default function Navbar() {
     { name: 'Available Listings', href: '/listings' },
     ...(user ? [
       { name: 'Manage Listings', href: '/listings/manage' },
-      { name: 'Post New Listing', href: '/listings/new' }
+      { name: 'Create Listing', href: '/listings/new' }
     ] : []),
   ]
 
