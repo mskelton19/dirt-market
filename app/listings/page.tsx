@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import ListingsMap from '@/components/ListingsMap'
 
 type Listing = {
   id: string
@@ -110,6 +111,7 @@ export default function ListingsPage() {
   const router = useRouter()
   const [expandedListings, setExpandedListings] = useState<string[]>([])
   const [distanceFilter, setDistanceFilter] = useState(50)
+  const [showMap, setShowMap] = useState(false)
 
   // Add authentication check
   useEffect(() => {
@@ -295,6 +297,18 @@ export default function ListingsPage() {
     return true;
   });
 
+  // Map the listings to match the expected type for ListingsMap
+  const mappedListings = filteredListings.map(listing => ({
+    id: listing.id,
+    title: listing.site_name,
+    location: {
+      lat: listing.latitude,
+      lng: listing.longitude
+    },
+    address: listing.location,
+    materialType: listing.material_type
+  }));
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -438,6 +452,12 @@ export default function ListingsPage() {
                     </svg>
                   </button>
                 </div>
+                <button
+                  onClick={() => setShowMap(!showMap)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  {showMap ? 'Hide Map' : 'Show Map'}
+                </button>
               </div>
             </div>
           </div>
@@ -1272,6 +1292,13 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
             )}
           </div>
         </div>
+
+        {/* Map View */}
+        {showMap && userLocation && (
+          <div className="mt-4">
+            <ListingsMap listings={mappedListings} userLocation={userLocation} />
+          </div>
+        )}
       </div>
     </div>
   )
