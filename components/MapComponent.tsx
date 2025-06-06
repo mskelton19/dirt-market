@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 // Remove MapboxGeocoder import
 // import MapboxGeocoder from '@mapbox/mapbox-gl-geocoder'
@@ -29,23 +29,29 @@ export default function MapComponent({ onLocationChange, initialLocation, onErro
   const [marker, setMarker] = useState<mapboxgl.Marker | null>(null)
   // Remove geocoder state
   // const [geocoder, setGeocoder] = useState<MapboxGeocoder | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const mapContainerRef = useRef<HTMLDivElement>(null)
 
   // Simplified updateLocationFromCoordinates - only calls onLocationChange with coordinates
-  const updateLocationFromCoordinates = (map: mapboxgl.Map, lng: number, lat: number) => {
-    onLocationChange({ lat, lng, placeName: '' }); // Only update coordinates
-
-    // Optional: keep map centered on pin during drag
-    map.setCenter([lng, lat]);
-    // Optional: adjust zoom during drag, or keep it fixed
-    // map.setZoom(map.getZoom());
+  const updateLocationFromCoordinates = async (map: mapboxgl.Map, lng: number, lat: number) => {
+    try {
+      // Perform reverse geocoding to get the address
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+      const placeName = (data.features && data.features.length > 0) ? data.features[0].place_name : '';
+      
+      onLocationChange({ lat, lng, placeName });
+    } catch (error) {
+      console.error('Error during reverse geocoding:', error);
+      onLocationChange({ lat, lng, placeName: '' });
+    }
   };
 
-  // Map initialization effect
+  // Map initialization effect - only runs once
   useEffect(() => {
     if (!mapboxgl.accessToken) {
       onError('Mapbox token is missing. Please check your environment variables.');
-      setIsLoading(false);
       return;
     }
 
@@ -55,97 +61,78 @@ export default function MapComponent({ onLocationChange, initialLocation, onErro
         container: 'map',
         style: 'mapbox://styles/mapbox/streets-v12',
         center: [initialLocation.lng, initialLocation.lat],
-        zoom: initialZoom // Use the initialZoom prop
+        zoom: initialZoom
       });
 
-      // Add navigation controls
-      newMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
+      // Wait for map to load before adding controls and marker
+      newMap.on('load', () => {
+        // Add navigation controls
+        newMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-      // Remove geocoder creation and adding to DOM
-      // const newGeocoder = new MapboxGeocoder({...});
-      // const geocoderContainer = document.getElementById('geocoder-container');
-      // if (geocoderContainer) { ... }
+        // Create initial marker
+        const initialMarker = new mapboxgl.Marker({
+          draggable: true
+        })
+          .setLngLat([initialLocation.lng, initialLocation.lat])
+          .addTo(newMap);
+        setMarker(initialMarker);
 
-      // Create initial marker
-      const initialMarker = new mapboxgl.Marker({
-        draggable: true
-      })
-        .setLngLat([initialLocation.lng, initialLocation.lat])
-        .addTo(newMap);
-      setMarker(initialMarker);
-
-      // Handle marker drag end - update location coordinates only
-      initialMarker.on('dragend', () => {
-        const lngLat = initialMarker.getLngLat();
-        onLocationChange({ lat: lngLat.lat, lng: lngLat.lng, placeName: '' }); // Update with coordinates only
-      });
-
-      // Handle map click - move marker and update location coordinates only
-      newMap.on('click', (e) => {
-        const { lng, lat } = e.lngLat;
-        // Use flyTo for smooth transition
-        newMap.flyTo({
-          center: [lng, lat],
-          zoom: newMap.getZoom(), // Keep current zoom level
-          essential: true // This animation is considered essential
+        // Handle marker drag end
+        initialMarker.on('dragend', async () => {
+          const lngLat = initialMarker.getLngLat();
+          await updateLocationFromCoordinates(newMap, lngLat.lng, lngLat.lat);
         });
-        // Remove immediate marker and location update
-        // initialMarker.setLngLat([lng, lat]);
-        // onLocationChange({ lat, lng, placeName: '' }); // Update with coordinates only
+
+        // Handle map click
+        newMap.on('click', async (e) => {
+          const { lng, lat } = e.lngLat;
+          initialMarker.setLngLat([lng, lat]);
+          await updateLocationFromCoordinates(newMap, lng, lat);
+        });
       });
-
-      // Handle map moveend event to update marker and location after animation
-      newMap.on('moveend', (e) => {
-        // Check if the moveend event was user-initiated (e.g., by click or dragend)
-        // Mapbox GL JS events often have originalEvent or a source property
-        // A robust check might involve tracking a flag set in click/dragend
-        // For simplicity, we'll update if the map center is very close to the initialLocation, or if a flag is set.
-        // A better approach is to set a flag in click/dragend and check it here.
-
-        // Simplified check: Assume moveend after a flyTo or user interaction is intended to update marker
-        // A more precise check could involve comparing the map center to the marker position or checking event flags.
-        const center = newMap.getCenter();
-        const markerLngLat = initialMarker.getLngLat();
-        const distance = Math.sqrt(Math.pow(center.lng - markerLngLat.lng, 2) + Math.pow(center.lat - markerLngLat.lat, 2));
-
-        // Update marker and location if the map center is not already at the marker's position (prevents updates on initial load moveend)
-        // and if the move was likely user-initiated (e.g., distance is significant, or a flag was set)
-        // A more robust implementation would use a flag from the click/dragend events.
-        if (distance > 0.0001) { // Use a small threshold to account for potential floating point inaccuracies
-             initialMarker.setLngLat(center);
-             onLocationChange({ lat: center.lat, lng: center.lng, placeName: '' }); // Update with coordinates
-        }
-      });
-
-      // Remove geocoder result listener
-      // newGeocoder.on('result', ...);
 
       setMap(newMap);
       // Remove geocoder state update
       // setGeocoder(newGeocoder);
-      setIsLoading(false);
+
+      return () => {
+        if (newMap) {
+          newMap.remove();
+        }
+        // Remove geocoder cleanup
+        // if (geocoder) { ... }
+      };
     } catch (error) {
       console.error('Error initializing map:', error);
       onError('Failed to initialize map. Please try again.');
-      setIsLoading(false);
+    }
+  }, []); // Empty dependency array - only initialize once
+
+  // Update marker position when initialLocation changes
+  useEffect(() => {
+    if (!marker || !map) return;
+
+    // Only update if the location has actually changed
+    const currentLngLat = marker.getLngLat();
+    if (currentLngLat.lng === initialLocation.lng && currentLngLat.lat === initialLocation.lat) {
+      return;
     }
 
-    return () => {
-      if (map) {
-        map.remove();
-      }
-      // Remove geocoder cleanup
-      // if (geocoder) { ... }
-    };
-  }, [initialLocation, onLocationChange, onError, initialZoom]); // Add initialZoom to dependencies
+    // Update marker position with smooth animation
+    marker.setLngLat([initialLocation.lng, initialLocation.lat]);
 
-  if (isLoading) {
-    return (
-      <div className="h-64 bg-gray-200 rounded-md flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+    // Smoothly fly to new location
+    map.flyTo({
+      center: [initialLocation.lng, initialLocation.lat],
+      zoom: initialZoom,
+      duration: 1000, // 1 second duration
+      essential: true
+    });
+  }, [initialLocation.lng, initialLocation.lat, initialZoom, marker, map]);
 
-  return null; // The map is rendered in the DOM via the container
+  return (
+    <div id="map" className="h-full w-full relative">
+      {/* Map will render here */}
+    </div>
+  ); // The map is rendered in the DOM via the container
 } 
