@@ -12,9 +12,11 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
 
   const navigation = [
-    { name: 'Available Listings', href: '/listings' },
+    { name: 'Home', href: '/' },
+    { name: 'Listings', href: '/listings' },
+    { name: 'Manage Listings', href: '/listings/manage', showWhenLoggedIn: true },
+    { name: 'Account', href: '/account', showWhenLoggedIn: true },
     ...(user ? [
-      { name: 'Manage Listings', href: '/listings/manage' },
       { name: 'Create Listing', href: '/listings/new' }
     ] : []),
   ]

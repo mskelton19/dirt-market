@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Link from 'next/link'
-import { isValidUSPhone, formatPhoneNumber, unformatPhoneNumber } from '@/app/utils/phoneUtils'
+import { isValidUSPhone, formatPhoneNumber, unformatPhoneNumber } from '@/utils/phoneUtils'
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -24,19 +24,10 @@ export default function SignUpPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    if (name === 'phone') {
-      // Format phone number as user types
-      const formatted = formatPhoneNumber(value)
-      setFormData(prev => ({
-        ...prev,
-        [name]: formatted
-      }))
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }))
-    }
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,14 +36,6 @@ export default function SignUpPage() {
     setIsLoading(true)
 
     try {
-      // Validate phone number
-      if (!isValidUSPhone(formData.phone)) {
-        throw new Error('Please enter a valid 10-digit US phone number')
-      }
-
-      // Format phone number for storage
-      const formattedPhone = unformatPhoneNumber(formData.phone)
-
       // Sign up the user with metadata
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
@@ -64,7 +47,7 @@ export default function SignUpPage() {
             company_name: formData.company_name,
             position: formData.position,
             zip_code: formData.zipCode,
-            phone: formattedPhone
+            phone: unformatPhoneNumber(formData.phone)
           }
         }
       })
@@ -76,10 +59,10 @@ export default function SignUpPage() {
       }
 
       // Redirect to verification page after successful signup
-      router.push('/auth/verify-email')
+      router.push('/auth/verify')
     } catch (error) {
       console.error('Full error details:', error)
-      setError(error instanceof Error ? error.message : 'Failed to create account. Please try again.')
+      setError('Failed to create account. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -203,27 +186,6 @@ export default function SignUpPage() {
               </select>
             </div>
 
-            {/* Phone Number */}
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-900 mb-1">
-                Phone number <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                required
-                value={formData.phone}
-                onChange={handleChange}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
-                placeholder="(XXX) XXX-XXXX"
-                maxLength={14} // (XXX) XXX-XXXX format
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                Enter a 10-digit US phone number
-              </p>
-            </div>
-
             {/* Zip Code */}
             <div>
               <label htmlFor="zipCode" className="block text-sm font-medium text-gray-900 mb-1">
@@ -236,6 +198,22 @@ export default function SignUpPage() {
                 required
                 pattern="[0-9]{5}"
                 value={formData.zipCode}
+                onChange={handleChange}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
+              />
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-900 mb-1">
+                Phone <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="phone"
+                name="phone"
+                type="text"
+                required
+                value={formData.phone}
                 onChange={handleChange}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
               />
