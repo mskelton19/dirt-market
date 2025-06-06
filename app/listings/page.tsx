@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import ListingsMap from '@/components/ListingsMap'
+import { generateListingEmailBody } from '@/utils/emailUtils'
 
 type Listing = {
   id: string
@@ -120,10 +121,10 @@ export default function ListingsPage() {
       return
     }
     if (!authLoading) {
-      fetchListings()
-      if (user) {
-        fetchUserLocation()
-      }
+    fetchListings()
+    if (user) {
+      fetchUserLocation()
+    }
     }
   }, [user, authLoading, router])
 
@@ -173,7 +174,7 @@ export default function ListingsPage() {
     } catch (error) {
       // Only log errors that aren't related to missing user
       if (error instanceof Error && !error.message.includes('No authenticated user')) {
-        console.error('Error fetching user location:', error)
+      console.error('Error fetching user location:', error)
       }
     }
   }
@@ -306,7 +307,14 @@ export default function ListingsPage() {
       lng: listing.longitude
     },
     address: listing.location,
-    materialType: listing.material_type
+    materialType: listing.material_type,
+    quantity: listing.quantity,
+    unit: listing.unit,
+    contact_company: listing.contact_company,
+    contact_email: listing.contact_email,
+    contact_phone: listing.contact_phone,
+    contact_first_name: listing.contact_first_name,
+    listing_type: listing.listing_type,
   }));
 
   if (loading) {
@@ -774,30 +782,22 @@ export default function ListingsPage() {
                               <div className="flex flex-col space-y-2">
                                 {listing.contact_email && (
                                   <a
-                                    href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
-
-I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
-
-Let me know if there's a good time to connect — happy to keep it quick.
-
-Thanks,
-${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
-                                    className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                                    href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${generateListingEmailBody({
+                                      title: listing.site_name,
+                                      materialType: listing.material_type,
+                                      quantity: listing.quantity,
+                                      unit: listing.unit,
+                                      address: listing.location,
+                                      contact_company: listing.contact_company,
+                                      contact_first_name: listing.contact_first_name,
+                                      listing_type: listing.listing_type
+                                    }, user)}`}
+                                    className="inline-flex items-center justify-center px-2.5 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                   >
-                                    <svg
-                                      className="h-5 w-5 mr-2.5"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                      />
+                                    <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                     </svg>
-                                    Email Company
+                                    Email
                                   </a>
                                 )}
                                 {listing.contact_phone && (
@@ -917,14 +917,16 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
                                   <div className="flex flex-col space-y-2 sm:flex-row sm:space-x-2 sm:space-y-0">
                                     {listing.contact_email && (
                                       <a
-                                        href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
-
-I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
-
-Let me know if there's a good time to connect — happy to keep it quick.
-
-Thanks,
-${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
+                                        href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${generateListingEmailBody({
+                                          title: listing.site_name,
+                                          materialType: listing.material_type,
+                                          quantity: listing.quantity,
+                                          unit: listing.unit,
+                                          address: listing.location,
+                                          contact_company: listing.contact_company,
+                                          contact_first_name: listing.contact_first_name,
+                                          listing_type: listing.listing_type
+                                        }, user)}`}
                                         className="inline-flex items-center justify-center px-2.5 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                       >
                                         <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1071,14 +1073,16 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
                               <div className="flex flex-col space-y-2">
                                 {listing.contact_email && (
                                   <a
-                                    href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
-
-I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
-
-Let me know if there's a good time to connect — happy to keep it quick.
-
-Thanks,
-${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
+                                    href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${generateListingEmailBody({
+                                      title: listing.site_name,
+                                      materialType: listing.material_type,
+                                      quantity: listing.quantity,
+                                      unit: listing.unit,
+                                      address: listing.location,
+                                      contact_company: listing.contact_company,
+                                      contact_first_name: listing.contact_first_name,
+                                      listing_type: listing.listing_type
+                                    }, user)}`}
                                     className="inline-flex items-center justify-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                                   >
                                     <svg
@@ -1214,14 +1218,16 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
                                   <div className="flex flex-col space-y-2 sm:flex-row sm:space-x-2 sm:space-y-0">
                                     {listing.contact_email && (
                                       <a
-                                        href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${encodeURIComponent(`Hi ${listing.contact_first_name || 'there'},
-
-I saw you've got ${listing.quantity} ${listing.unit} of ${formatMaterialType(listing.material_type)} listed for ${listing.listing_type.toLowerCase()}. I'm looking to move this type of material and think we might be a good fit to work together.
-
-Let me know if there's a good time to connect — happy to keep it quick.
-
-Thanks,
-${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
+                                        href={`mailto:${listing.contact_email}?subject=${encodeURIComponent(`Interested in Your Available ${formatMaterialType(listing.material_type)}`)}&body=${generateListingEmailBody({
+                                          title: listing.site_name,
+                                          materialType: listing.material_type,
+                                          quantity: listing.quantity,
+                                          unit: listing.unit,
+                                          address: listing.location,
+                                          contact_company: listing.contact_company,
+                                          contact_first_name: listing.contact_first_name,
+                                          listing_type: listing.listing_type
+                                        }, user)}`}
                                         className="inline-flex items-center justify-center px-2.5 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                       >
                                         <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1296,7 +1302,7 @@ ${user?.user_metadata?.first_name || 'A potential customer'}`)}`}
         {/* Map View */}
         {showMap && userLocation && (
           <div className="mt-4">
-            <ListingsMap listings={mappedListings} userLocation={userLocation} />
+            <ListingsMap listings={mappedListings} userLocation={userLocation} user={user} />
           </div>
         )}
       </div>
