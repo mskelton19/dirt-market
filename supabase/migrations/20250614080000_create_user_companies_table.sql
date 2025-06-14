@@ -32,17 +32,23 @@ CREATE POLICY "Users can create their own company relationships" ON user_compani
 CREATE POLICY "Users can update their own company relationships" ON user_companies
     FOR UPDATE USING (auth.uid() = user_id);
 
--- Company admins can view all relationships for their company
-CREATE POLICY "Company admins can view company relationships" ON user_companies
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM user_companies uc 
-            WHERE uc.user_id = auth.uid() 
-            AND uc.company_id = user_companies.company_id 
-            AND uc.role = 'admin'
-            AND uc.status = 'active'
-        )
+-- Create a security definer function to check if user is admin of a company
+CREATE OR REPLACE FUNCTION is_company_admin(company_uuid UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM user_companies 
+        WHERE user_id = auth.uid() 
+        AND company_id = company_uuid 
+        AND role = 'admin'
+        AND status = 'active'
     );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Company admins can view and update all relationships for their company
+CREATE POLICY "Company admins can view company relationships" ON user_companies
+    FOR SELECT USING (is_company_admin(company_id));
 
 -- Create trigger to automatically update updated_at
 CREATE TRIGGER update_user_companies_updated_at

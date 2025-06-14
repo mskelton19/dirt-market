@@ -188,7 +188,7 @@ export default function CreateCompanyPage() {
                 required
                 value={formData.name}
                 onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
               />
             </div>
 
@@ -202,7 +202,7 @@ export default function CreateCompanyPage() {
                 name="industry"
                 value={formData.industry}
                 onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
               >
                 <option value="">Select industry</option>
                 <option value="General Construction">General Construction</option>
@@ -226,7 +226,7 @@ export default function CreateCompanyPage() {
                 name="company_size"
                 value={formData.company_size}
                 onChange={handleChange}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
               >
                 <option value="">Select size</option>
                 <option value="1-10">1-10 employees</option>
@@ -249,7 +249,7 @@ export default function CreateCompanyPage() {
                   name="address_line1"
                   value={formData.address_line1}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
                 />
               </div>
 
@@ -263,7 +263,7 @@ export default function CreateCompanyPage() {
                   name="address_line2"
                   value={formData.address_line2}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
                 />
               </div>
 
@@ -277,7 +277,7 @@ export default function CreateCompanyPage() {
                   name="city"
                   value={formData.city}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
                 />
               </div>
 
@@ -291,7 +291,7 @@ export default function CreateCompanyPage() {
                   name="state"
                   value={formData.state}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
                 />
               </div>
 
@@ -305,7 +305,7 @@ export default function CreateCompanyPage() {
                   name="postal_code"
                   value={formData.postal_code}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
                 />
               </div>
 
@@ -319,7 +319,7 @@ export default function CreateCompanyPage() {
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
                 />
               </div>
             </div>
@@ -336,7 +336,7 @@ export default function CreateCompanyPage() {
                 value={formData.website}
                 onChange={handleChange}
                 placeholder="https://"
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
               />
             </div>
 
@@ -352,7 +352,7 @@ export default function CreateCompanyPage() {
                 value={formData.description}
                 onChange={handleChange}
                 placeholder="Tell us about your company..."
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-600"
               />
             </div>
 

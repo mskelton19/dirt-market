@@ -4,7 +4,7 @@ import { useState, Suspense, lazy, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { MaterialType } from '@/app/types/materials'
+
 import { useAuth } from '@/contexts/AuthContext'
 import OnboardingGuard from '@/components/OnboardingGuard'
 
@@ -36,12 +36,7 @@ interface FormData {
   contact_company: string
 }
 
-interface UserProfile {
-  id: string
-  zip_code: string
-  created_at: string
-  updated_at: string
-}
+
 
 export default function NewListingPage() {
   const router = useRouter()
@@ -84,6 +79,11 @@ export default function NewListingPage() {
 
   // Add geocoder initialization effect
   useEffect(() => {
+    // Wait for the container to be available
+    if (!geocoderContainerRef.current) {
+      return;
+    }
+
     // Initialize Mapbox
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
@@ -107,7 +107,7 @@ export default function NewListingPage() {
         center: [location.lng, location.lat],
         zoom: initialZoom,
         interactive: false
-    }) as any;
+    });
 
     const geocoder = new MapboxGeocoder({
       accessToken: mapboxgl.accessToken,
@@ -128,14 +128,18 @@ export default function NewListingPage() {
 
     geocoderRef.current = geocoder;
 
-    if (geocoderContainerRef.current) {
+    try {
       geocoderContainerRef.current.innerHTML = '';
       const geocoderElement = geocoder.onAdd(dummyMap);
       geocoderContainerRef.current.appendChild(geocoderElement);
+    } catch (error) {
+      console.error('Error adding geocoder to DOM:', error);
+      setMapboxError('Failed to initialize address search.');
+      return;
     }
 
     // Handle geocoder result
-    geocoder.on('result', (e: any) => {
+    geocoder.on('result', (e: { result: { center: [number, number]; place_name: string } }) => {
       const [lng, lat] = e.result.center;
       const placeName = e.result.place_name;
       setLocation({ lat, lng, placeName });
@@ -174,7 +178,7 @@ export default function NewListingPage() {
         dummyMap.remove();
       }
     };
-  }, [location.lng, location.lat, initialZoom, setValue]);
+  }, [setValue]); // Removed location and initialZoom dependencies to prevent re-initialization
 
   // Handle location change from MapComponent (pin drag/click)
   const handleLocationChange = async (newLocation: { lat: number, lng: number, placeName: string }) => {
@@ -303,7 +307,7 @@ export default function NewListingPage() {
       }
 
       router.push('/listings/manage')
-    } catch (error: any) {
+    } catch (error: Error | any) {
       console.error('Error creating listing:', error)
       alert(error.message || 'Failed to create listing. Please try again.')
     } finally {
