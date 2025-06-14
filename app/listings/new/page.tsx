@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { MaterialType } from '@/app/types/materials'
 import { useAuth } from '@/contexts/AuthContext'
+import OnboardingGuard from '@/components/OnboardingGuard'
 
 // Add Mapbox imports
 import mapboxgl from 'mapbox-gl';
@@ -311,7 +312,8 @@ export default function NewListingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <OnboardingGuard requiresCompany>
+      <div className="min-h-screen bg-gray-50">
       <style jsx global>{`
         .mapboxgl-ctrl-geocoder {
           width: 100% !important;
@@ -494,5 +496,6 @@ export default function NewListingPage() {
         </div>
       </div>
     </div>
+    </OnboardingGuard>
   )
 }

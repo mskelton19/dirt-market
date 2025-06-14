@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Link from 'next/link'
+import { checkUserOnboardingStatus } from '@/lib/onboarding'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -26,6 +27,19 @@ export default function LoginPage() {
       })
 
       if (error) throw error
+
+      // Get the current user after successful login
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (user) {
+        // Check if user needs onboarding
+        const { needsOnboarding } = await checkUserOnboardingStatus(user)
+        
+        if (needsOnboarding) {
+          router.push('/onboarding')
+          return
+        }
+      }
 
       // Get the redirect URL from query params, default to /listings
       const redirectTo = searchParams.get('redirectedFrom') || '/listings'

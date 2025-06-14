@@ -12,9 +12,7 @@ export default function SignUpPage() {
     password: '',
     firstName: '',
     lastName: '',
-    company_name: '',
     position: '',
-    zipCode: '',
     phone: ''
   })
   const [error, setError] = useState<string | null>(null)
@@ -61,9 +59,7 @@ export default function SignUpPage() {
           data: {
             first_name: formData.firstName,
             last_name: formData.lastName,
-            company_name: formData.company_name,
             position: formData.position,
-            zip_code: formData.zipCode,
             phone: formattedPhone
           }
         }
@@ -167,21 +163,7 @@ export default function SignUpPage() {
               />
             </div>
 
-            {/* Company */}
-            <div>
-              <label htmlFor="company_name" className="block text-sm font-medium text-gray-900 mb-1">
-                Company name <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="company_name"
-                name="company_name"
-                type="text"
-                required
-                value={formData.company_name}
-                onChange={handleChange}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
-              />
-            </div>
+
 
             {/* Position */}
             <div>
@@ -224,22 +206,7 @@ export default function SignUpPage() {
               </p>
             </div>
 
-            {/* Zip Code */}
-            <div>
-              <label htmlFor="zipCode" className="block text-sm font-medium text-gray-900 mb-1">
-                Company ZIP code <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="zipCode"
-                name="zipCode"
-                type="text"
-                required
-                pattern="[0-9]{5}"
-                value={formData.zipCode}
-                onChange={handleChange}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
-              />
-            </div>
+
 
             {error && (
               <div className="rounded-md bg-red-50 p-4">

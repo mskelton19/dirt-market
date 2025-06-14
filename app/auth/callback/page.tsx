@@ -26,8 +26,8 @@ export default function AuthCallbackPage() {
             throw error
           }
 
-          // If verification successful, redirect to listings page
-          router.push('/listings')
+          // If verification successful, redirect to onboarding
+          router.push('/onboarding')
         }
       } catch (error) {
         console.error('Error verifying email:', error)

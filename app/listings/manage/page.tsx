@@ -10,6 +10,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import ErrorMessage from '@/components/ErrorMessage'
 import CompanyMaterialChart from '@/components/CompanyMaterialChart'
+import OnboardingGuard from '@/components/OnboardingGuard'
 
 type Listing = {
   id: string
@@ -432,7 +433,8 @@ export default function ManageListingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <OnboardingGuard requiresCompany>
+      <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Error Message */}
         {error && (
@@ -938,5 +940,6 @@ export default function ManageListingsPage() {
         </Dialog>
       </Transition.Root>
     </div>
+    </OnboardingGuard>
   )
 } 
