@@ -414,6 +414,7 @@ export default function NewListingPage() {
                     {...register('unit')}
                     className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm text-black bg-gray-50"
                     placeholder="Unit will be set automatically"
+                    disabled={true}
                     readOnly
                   />
                   {errors.unit && <p className="mt-1 text-sm text-red-600">{errors.unit.message}</p>}
