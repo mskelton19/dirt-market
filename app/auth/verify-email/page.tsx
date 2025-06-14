@@ -28,7 +28,7 @@ export default function VerifyEmailPage() {
 
             <div className="text-sm">
               <p className="text-gray-600">
-                Didn't receive the email? Check your spam folder or{' '}
+                Didn&apos;t receive the email? Check your spam folder or{' '}
                 <Link href="/auth/login" className="font-medium text-indigo-600 hover:text-indigo-500">
                   try signing up again
                 </Link>
@@ -48,4 +48,4 @@ export default function VerifyEmailPage() {
       </div>
     </div>
   )
-} 
+}
