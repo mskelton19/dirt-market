@@ -192,7 +192,6 @@ export default function ListingsPage() {
         throw error
       }
 
-      console.log('Fetched listings:', data)
       setListings(data || [])
     } catch (error: any) {
       console.error('Error fetching listings:', error)

@@ -1,5 +1,6 @@
 import { User } from '@supabase/supabase-js'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useEffect, useState } from 'react'
 
 export interface UserCompany {
   id: string
@@ -111,6 +112,33 @@ export async function getUserCompany(user: User): Promise<UserCompany | null> {
     console.error('Error getting user company:', error)
     return null
   }
+}
+
+export const useCompany = (user?: User | null) => {
+  const [userCompany, setUserCompany] = useState<UserCompany | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchUserCompany = async () => {
+      if (!user) {
+        setUserCompany(null)
+        setLoading(false)
+        return
+      }
+      try {
+        const userCompany = await getUserCompany(user)
+        setUserCompany(userCompany)
+        setLoading(false)
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'Unknown error occurred')
+        setLoading(false)
+      }
+    }
+    fetchUserCompany()
+  }, [user])
+
+  return { userCompany, loading, error }
 }
 
 /**
