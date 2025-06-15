@@ -1,15 +1,17 @@
-'use client'
+"use client";
 
-import { useAuth } from '@/contexts/AuthContext'
-import Link from 'next/link'
-import { useState } from 'react'
-import { Dialog, Transition } from '@headlessui/react'
-import { Fragment } from 'react'
-import { XMarkIcon, Bars3Icon, UserIcon } from '@heroicons/react/24/outline'
+import { useAuth } from "@/contexts/AuthContext";
+import Link from "next/link";
+import { useState } from "react";
+import { Dialog, Transition } from "@headlessui/react";
+import { Fragment } from "react";
+import { XMarkIcon, Bars3Icon, UserIcon, BuildingOfficeIcon } from "@heroicons/react/24/outline";
+import { useCompany } from "@/lib/onboarding";
 
 export default function Navbar() {
-  const { user, signOut } = useAuth()
-  const [isOpen, setIsOpen] = useState(false)
+  const { user, signOut } = useAuth();
+  const { userCompany } = useCompany(user);
+  const [isOpen, setIsOpen] = useState(false);
 
   const navigation = [
     { name: 'Home', href: '/' },
@@ -87,7 +89,10 @@ export default function Navbar() {
                               onClick={() => setIsOpen(false)}
                             >
                               <span className="sr-only">Close panel</span>
-                              <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                              <XMarkIcon
+                                className="h-6 w-6"
+                                aria-hidden="true"
+                              />
                             </button>
                           </div>
                         </div>
@@ -112,10 +117,21 @@ export default function Navbar() {
                                   {user.email}
                                 </span>
                               </div>
+                              {userCompany && (
+                                <div className="flex items-center space-x-2 px-3">
+                                  <BuildingOfficeIcon className="h-5 w-5 text-gray-500" />
+                                  <span className="text-gray-700 text-sm">
+                                    {userCompany.companies.name}
+                                  </span>
+                                  <span className="text-gray-400 text-sm">
+                                    {userCompany.role}
+                                  </span>
+                                </div>
+                              )}
                               <button
                                 onClick={() => {
-                                  signOut()
-                                  setIsOpen(false)
+                                  signOut();
+                                  setIsOpen(false);
                                 }}
                                 className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
                               >
@@ -151,5 +167,5 @@ export default function Navbar() {
         </Dialog>
       </Transition.Root>
     </nav>
-  )
+  );
 }

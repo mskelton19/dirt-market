@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Link from 'next/link'
-import { isValidUSPhone, formatPhoneNumber, unformatPhoneNumber } from '@/utils/phoneUtils'
+import { unformatPhoneNumber } from '@/utils/phoneUtils'
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -12,10 +12,9 @@ export default function SignUpPage() {
     password: '',
     firstName: '',
     lastName: '',
-    company_name: '',
     position: '',
-    zipCode: '',
-    phone: ''
+    phone: '',
+    zipCode: ''
   })
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -44,7 +43,6 @@ export default function SignUpPage() {
           data: {
             first_name: formData.firstName,
             last_name: formData.lastName,
-            company_name: formData.company_name,
             position: formData.position,
             zip_code: formData.zipCode,
             phone: unformatPhoneNumber(formData.phone)
@@ -150,21 +148,7 @@ export default function SignUpPage() {
               />
             </div>
 
-            {/* Company */}
-            <div>
-              <label htmlFor="company_name" className="block text-sm font-medium text-gray-900 mb-1">
-                Company name <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="company_name"
-                name="company_name"
-                type="text"
-                required
-                value={formData.company_name}
-                onChange={handleChange}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
-              />
-            </div>
+
 
             {/* Position */}
             <div>
