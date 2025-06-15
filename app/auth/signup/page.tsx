@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Link from 'next/link'
-import { isValidUSPhone, formatPhoneNumber, unformatPhoneNumber } from '@/utils/phoneUtils'
+import { unformatPhoneNumber } from '@/utils/phoneUtils'
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -13,7 +13,8 @@ export default function SignUpPage() {
     firstName: '',
     lastName: '',
     position: '',
-    phone: ''
+    phone: '',
+    zipCode: ''
   })
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -43,12 +44,8 @@ export default function SignUpPage() {
             first_name: formData.firstName,
             last_name: formData.lastName,
             position: formData.position,
-<<<<<<< HEAD
-            phone: formattedPhone
-=======
             zip_code: formData.zipCode,
             phone: unformatPhoneNumber(formData.phone)
->>>>>>> 7c91b0d3bbd71c7df4cdd2ab2c8ee5ddf6a71a60
           }
         }
       })
@@ -173,30 +170,6 @@ export default function SignUpPage() {
               </select>
             </div>
 
-<<<<<<< HEAD
-            {/* Phone Number */}
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-900 mb-1">
-                Phone number <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                required
-                value={formData.phone}
-                onChange={handleChange}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
-                placeholder="(XXX) XXX-XXXX"
-                maxLength={14} // (XXX) XXX-XXXX format
-              />
-              <p className="mt-1 text-sm text-gray-500">
-                Enter a 10-digit US phone number
-              </p>
-            </div>
-
-
-=======
             {/* Zip Code */}
             <div>
               <label htmlFor="zipCode" className="block text-sm font-medium text-gray-900 mb-1">
@@ -213,7 +186,6 @@ export default function SignUpPage() {
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-4 py-2 font-sans text-gray-900 placeholder-gray-500"
               />
             </div>
->>>>>>> 7c91b0d3bbd71c7df4cdd2ab2c8ee5ddf6a71a60
 
             {/* Phone */}
             <div>
