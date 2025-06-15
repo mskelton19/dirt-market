@@ -1,5 +1,35 @@
 -- Update companies table
-ALTER TABLE companies ADD COLUMN slug VARCHAR(255) UNIQUE NOT NULL;
+-- Step 1: Add slug column as nullable first
+ALTER TABLE companies ADD COLUMN slug VARCHAR(255);
+
+-- Step 2: Update existing records with slugs based on company names
+UPDATE companies 
+SET slug = LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9\s-]', '', 'g'))
+WHERE slug IS NULL;
+
+-- Step 3: Handle potential duplicates by appending numbers
+WITH numbered_slugs AS (
+  SELECT 
+    id,
+    name,
+    slug,
+    ROW_NUMBER() OVER (PARTITION BY slug ORDER BY created_at) as rn
+  FROM companies
+  WHERE slug IS NOT NULL
+)
+UPDATE companies 
+SET slug = CASE 
+  WHEN numbered_slugs.rn > 1 THEN numbered_slugs.slug || '-' || (numbered_slugs.rn - 1)
+  ELSE numbered_slugs.slug
+END
+FROM numbered_slugs
+WHERE companies.id = numbered_slugs.id;
+
+-- Step 4: Now make slug NOT NULL and UNIQUE
+ALTER TABLE companies ALTER COLUMN slug SET NOT NULL;
+ALTER TABLE companies ADD CONSTRAINT companies_slug_unique UNIQUE (slug);
+
+-- Add other columns
 ALTER TABLE companies ADD COLUMN description TEXT;
 ALTER TABLE companies ADD COLUMN industry VARCHAR(100);
 ALTER TABLE companies ADD COLUMN company_size VARCHAR(50); -- e.g., '1-10', '11-50', '51-200', '201-500', '500+'
